@@ -4,6 +4,8 @@
 #include "FWCore/Utilities/interface/Exception.h"
 #include "FWCore/Utilities/interface/Span.h"
 
+#include "HeterogeneousCore/SonicTriton/interface/TritonConverterBase.h"
+
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -39,6 +41,13 @@ public:
   //some members can be modified
   bool setShape(const ShapeType& newShape) { return setShape(newShape, true); }
   bool setShape(unsigned loc, int64_t val) { return setShape(loc, val, true); }
+
+  void setConverterParams(const edm::ParameterSet& conf) {
+    converterConf_ = conf;
+    converterName_ = conf.getParameter<std::string>("converterName");
+  }
+  template <typename DT>
+  std::unique_ptr<TritonConverterBase<DT>> createConverter() const;
 
   //io accessors
   template <typename DT>
@@ -93,6 +102,8 @@ private:
   int64_t byteSize_;
   std::any holder_;
   std::shared_ptr<Result> result_;
+  edm::ParameterSet converterConf_;
+  std::string converterName_;
 };
 
 using TritonInputData = TritonData<nvidia::inferenceserver::client::InferInput>;
@@ -107,6 +118,12 @@ void TritonInputData::toServer(std::shared_ptr<TritonInput<DT>> ptr);
 template <>
 template <typename DT>
 TritonOutput<DT> TritonOutputData::fromServer() const;
+template <>
+template <typename DT>
+std::unique_ptr<TritonConverterBase<DT>> TritonOutputData::createConverter() const;
+template <>
+template <typename DT>
+std::unique_ptr<TritonConverterBase<DT>> TritonInputData::createConverter() const;
 template <>
 void TritonInputData::reset();
 template <>

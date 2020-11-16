@@ -79,6 +79,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   if (!msg_str.empty())
     throw cms::Exception("ModelErrors") << msg_str;
 
+  const edm::ParameterSet converterDefs = params.getParameterSet("converterDefinition");
   //setup input map
   std::stringstream io_msg;
   if (verbose_)
@@ -90,6 +91,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
     auto [curr_itr, success] = input_.emplace(
         std::piecewise_construct, std::forward_as_tuple(iname), std::forward_as_tuple(iname, nicInput, noBatch_));
     auto& curr_input = curr_itr->second;
+    curr_input.setConverterParams(converterDefs);
     inputsTriton_.push_back(curr_input.data());
     if (verbose_) {
       io_msg << "  " << iname << " (" << curr_input.dname() << ", " << curr_input.byteSize()
@@ -113,6 +115,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
     auto [curr_itr, success] = output_.emplace(
         std::piecewise_construct, std::forward_as_tuple(oname), std::forward_as_tuple(oname, nicOutput, noBatch_));
     auto& curr_output = curr_itr->second;
+    curr_output.setConverterParams(converterDefs);
     outputsTriton_.push_back(curr_output.data());
     if (verbose_) {
       io_msg << "  " << oname << " (" << curr_output.dname() << ", " << curr_output.byteSize()
@@ -336,10 +339,14 @@ inference::ModelStatistics TritonClient::getServerSideStatus() const {
 
 //for fillDescriptions
 void TritonClient::fillPSetDescription(edm::ParameterSetDescription& iDesc) {
+  edm::ParameterSetDescription descConverter;
+  fillBasePSetDescription(descConverter);
+  descConverter.add<std::string>("converterName");
   edm::ParameterSetDescription descClient;
   fillBasePSetDescription(descClient);
   descClient.add<std::string>("modelName");
   descClient.add<std::string>("modelVersion", "");
+  descClient.add<edm::ParameterSetDescription>("converterDefinition", descConverter);
   //server parameters should not affect the physics results
   descClient.addUntracked<unsigned>("batchSize");
   descClient.addUntracked<std::string>("address");

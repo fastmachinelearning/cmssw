@@ -49,6 +49,9 @@ process.TritonProducer = cms.EDProducer(options.producer,
         modelVersion = cms.string(""),
         verbose = cms.untracked.bool(options.verbose),
         allowedTries = cms.untracked.uint32(0),
+        converterDefinition = cms.PSet(
+            converterName = cms.string("FloatStandardConverter"),
+        ),
     )
 )
 if options.producer=="TritonImageProducer":

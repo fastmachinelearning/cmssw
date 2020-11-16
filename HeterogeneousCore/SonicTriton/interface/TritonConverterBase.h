@@ -9,8 +9,10 @@
 template <typename DT>
 class TritonConverterBase {
 public:
-  TritonConverterBase(const edm::ParameterSet& conf) : converterName_(conf.getParameter<std::string>("converterName")), byteSize_(sizeof(DT)) {}
-  TritonConverterBase(const edm::ParameterSet& conf, size_t byteSize) : converterName_(conf.getParameter<std::string>("converterName")), byteSize_(byteSize) {}
+  TritonConverterBase(const edm::ParameterSet& conf)
+      : converterName_(conf.getParameter<std::string>("converterName")), byteSize_(sizeof(DT)) {}
+  TritonConverterBase(const edm::ParameterSet& conf, size_t byteSize)
+      : converterName_(conf.getParameter<std::string>("converterName")), byteSize_(byteSize) {}
   TritonConverterBase(const TritonConverterBase&) = delete;
   virtual ~TritonConverterBase() = default;
   TritonConverterBase& operator=(const TritonConverterBase&) = delete;

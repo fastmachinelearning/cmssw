@@ -104,15 +104,15 @@ void TritonData<IO>::setBatchSize(unsigned bsize) {
 }
 
 template <>
-template<typename DT>
+template <typename DT>
 std::unique_ptr<TritonConverterBase<DT>> TritonInputData::createConverter() const {
-  return TritonConverterFactory<DT>::get()->create(converterName_,converterConf_);
+  return TritonConverterFactory<DT>::get()->create(converterName_, converterConf_);
 }
 
 template <>
-template<typename DT>
+template <typename DT>
 std::unique_ptr<TritonConverterBase<DT>> TritonOutputData::createConverter() const {
-  return TritonConverterFactory<DT>::get()->create(converterName_,converterConf_);
+  return TritonConverterFactory<DT>::get()->create(converterName_, converterConf_);
 }
 
 //io accessors
@@ -130,7 +130,7 @@ void TritonInputData::toServer(std::shared_ptr<TritonInput<DT>> ptr) {
   //shape must be specified for variable dims or if batch size changes
   data_->SetShape(fullShape_);
 
-  std::unique_ptr<TritonConverterBase<DT>> converter = createConverter<DT>(); 
+  std::unique_ptr<TritonConverterBase<DT>> converter = createConverter<DT>();
 
   if (byteSize_ != converter->getByteSize())
     throw cms::Exception("TritonDataError") << name_ << " input(): inconsistent byte size " << converter->getByteSize()

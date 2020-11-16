@@ -79,7 +79,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   if (!msg_str.empty())
     throw cms::Exception("ModelErrors") << msg_str;
 
-  const edm::ParameterSet converterDefs = params.getParameterSet("converterDefinition");
+  const edm::ParameterSet& converterDefs = params.getParameterSet("converterDefinition");
   //setup input map
   std::stringstream io_msg;
   if (verbose_)

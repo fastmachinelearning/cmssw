@@ -1,11 +1,5 @@
-<library   name="HeterogeneousCoreSonicTritonPlugins_converters" file="converters/*.cc">
-  <use   name="FWCore/Utilities"/>
-  <use   name="FWCore/ParameterSet"/>
-  <use   name="FWCore/PluginManager"/>
-  <use   name="DataFormats/Common"/>
-  <use   name="HeterogeneousCore/SonicTriton"/>
-  <use   name="triton-inference-server"/>
-  <use   name="protobuf"/>
-  <use   name="hls"/>
-  <flags   EDM_PLUGIN="1"/>
+<library name="HeterogeneousCoreSonicTritonPlugins_converters" file="converters/*.cc">
+  <use name="HeterogeneousCore/SonicTriton"/>
+  <use name="hls"/>
+  <flags EDM_PLUGIN="1"/>
 </library>

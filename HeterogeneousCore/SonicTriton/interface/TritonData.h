@@ -4,6 +4,7 @@
 #include "FWCore/Utilities/interface/Exception.h"
 #include "FWCore/Utilities/interface/Span.h"
 
+#include "FWCore/PluginManager/interface/PluginFactory.h"
 #include "HeterogeneousCore/SonicTriton/interface/TritonConverterBase.h"
 
 #include <vector>
@@ -43,11 +44,10 @@ public:
   bool setShape(unsigned loc, int64_t val) { return setShape(loc, val, true); }
 
   void setConverterParams(const edm::ParameterSet& conf) {
-    converterConf_ = conf;
     converterName_ = conf.getParameter<std::string>("converterName");
   }
   template <typename DT>
-  std::unique_ptr<TritonConverterBase<DT>> createConverter() const;
+  std::unique_ptr<TritonConverterBase<DT>> createConverter() const { return TritonConverterFactory<DT>::get()->create(converterName_); }
 
   //io accessors
   template <typename DT>
@@ -102,7 +102,7 @@ private:
   int64_t byteSize_;
   std::any holder_;
   std::shared_ptr<Result> result_;
-  edm::ParameterSet converterConf_;
+  std::any converter_;
   std::string converterName_;
 };
 
@@ -118,12 +118,6 @@ void TritonInputData::toServer(std::shared_ptr<TritonInput<DT>> ptr);
 template <>
 template <typename DT>
 TritonOutput<DT> TritonOutputData::fromServer() const;
-template <>
-template <typename DT>
-std::unique_ptr<TritonConverterBase<DT>> TritonOutputData::createConverter() const;
-template <>
-template <typename DT>
-std::unique_ptr<TritonConverterBase<DT>> TritonInputData::createConverter() const;
 template <>
 void TritonInputData::reset();
 template <>

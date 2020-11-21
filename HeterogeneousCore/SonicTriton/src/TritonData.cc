@@ -2,7 +2,6 @@
 #include "HeterogeneousCore/SonicTriton/interface/triton_utils.h"
 #include "HeterogeneousCore/SonicTriton/interface/TritonConverterBase.h"
 #include "FWCore/MessageLogger/interface/MessageLogger.h"
-#include "FWCore/PluginManager/interface/PluginFactory.h"
 
 #include "model_config.pb.h"
 
@@ -103,18 +102,6 @@ void TritonData<IO>::setBatchSize(unsigned bsize) {
     fullShape_[0] = batchSize_;
 }
 
-template <>
-template <typename DT>
-std::unique_ptr<TritonConverterBase<DT>> TritonInputData::createConverter() const {
-  return TritonConverterFactory<DT>::get()->create(converterName_, converterConf_);
-}
-
-template <>
-template <typename DT>
-std::unique_ptr<TritonConverterBase<DT>> TritonOutputData::createConverter() const {
-  return TritonConverterFactory<DT>::get()->create(converterName_, converterConf_);
-}
-
 //io accessors
 template <>
 template <typename DT>
@@ -132,8 +119,8 @@ void TritonInputData::toServer(std::shared_ptr<TritonInput<DT>> ptr) {
 
   std::unique_ptr<TritonConverterBase<DT>> converter = createConverter<DT>();
 
-  if (byteSize_ != converter->getByteSize())
-    throw cms::Exception("TritonDataError") << name_ << " input(): inconsistent byte size " << converter->getByteSize()
+  if (byteSize_ != converter->byteSize())
+    throw cms::Exception("TritonDataError") << name_ << " input(): inconsistent byte size " << converter->byteSize()
                                             << " (should be " << byteSize_ << " for " << dname_ << ")";
 
   int64_t nInput = sizeShape();
@@ -165,7 +152,7 @@ TritonOutput<DT> TritonOutputData::fromServer() const {
   TritonOutput<DT> dataOut;
   const uint8_t* r0;
   size_t contentByteSize;
-  size_t expectedContentByteSize = nOutput * converter->getByteSize() * batchSize_;
+  size_t expectedContentByteSize = nOutput * converter->byteSize() * batchSize_;
   triton_utils::throwIfError(result_->RawData(name_, &r0, &contentByteSize), "output(): unable to get raw");
   if (contentByteSize != expectedContentByteSize) {
     throw cms::Exception("TritonDataError") << name_ << " output(): unexpected content byte size " << contentByteSize

@@ -47,7 +47,9 @@ public:
     converterName_ = conf.getParameter<std::string>("converterName");
   }
   template <typename DT>
-  std::unique_ptr<TritonConverterBase<DT>> createConverter() const { return TritonConverterFactory<DT>::get()->create(converterName_); }
+  void createConverter() const { 
+    if (!converter_.has_value()) converter_ = std::shared_ptr<TritonConverterBase<DT>>(TritonConverterFactory<DT>::get()->create(converterName_));
+  }
 
   //io accessors
   template <typename DT>
@@ -102,7 +104,7 @@ private:
   int64_t byteSize_;
   std::any holder_;
   std::shared_ptr<Result> result_;
-  std::any converter_;
+  mutable std::any converter_;
   std::string converterName_;
 };
 

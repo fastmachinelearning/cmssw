@@ -8,7 +8,7 @@
 
 template <typename DT>
 class TritonConverterBase {
-//class needs to be templated since the convert functions require the data type, but need to also be virtual, and virtual member function templates are not allowed ion C++
+//class needs to be templated since the convert functions require the data type, but need to also be virtual, and virtual member function templates are not allowed in C++
 public:
   TritonConverterBase(const std::string convName)
       : converterName_(convName), byteSize_(sizeof(DT)) {}

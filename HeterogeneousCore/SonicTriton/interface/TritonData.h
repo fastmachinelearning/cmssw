@@ -48,7 +48,9 @@ public:
   }
   template <typename DT>
   void createConverter() const { 
-    if (!converter_.has_value()) converter_ = std::shared_ptr<TritonConverterBase<DT>>(TritonConverterFactory<DT>::get()->create(converterName_));
+    using ConverterType = std::shared_ptr<TritonConverterBase<DT>>;
+    //this contruction catches bad any_cast without throwing std exception
+    if (auto ptr = std::any_cast<ConverterType>(&converter_)) {} else { converter_ = ConverterType(TritonConverterFactory<DT>::get()->create(converterName_)); }
   }
 
   //io accessors

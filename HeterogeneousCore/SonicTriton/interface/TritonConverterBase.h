@@ -25,6 +25,8 @@ public:
 
   const std::string& name() const { return converterName_; }
 
+  virtual void clear() const {}
+
 private:
   const std::string converterName_;
   const int64_t byteSize_;

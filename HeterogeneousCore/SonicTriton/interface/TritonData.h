@@ -43,16 +43,6 @@ public:
   bool setShape(const ShapeType& newShape) { return setShape(newShape, true); }
   bool setShape(unsigned loc, int64_t val) { return setShape(loc, val, true); }
 
-  void setConverterParams(const edm::ParameterSet& conf) {
-    converterName_ = conf.getParameter<std::string>("converterName");
-  }
-  template <typename DT>
-  void createConverter() const { 
-    using ConverterType = std::shared_ptr<TritonConverterBase<DT>>;
-    //this construction catches bad any_cast without throwing std exception
-    if (auto ptr = std::any_cast<ConverterType>(&converter_)) {} else { converter_ = ConverterType(TritonConverterFactory<DT>::get()->create(converterName_)); }
-  }
-
   //io accessors
   template <typename DT>
   void toServer(std::shared_ptr<TritonInput<DT>> ptr);
@@ -82,6 +72,22 @@ private:
   void setResult(std::shared_ptr<Result> result) { result_ = result; }
   IO* data() { return data_.get(); }
 
+  void setConverterParams(const edm::ParameterSet& conf) {
+    converterName_ = conf.getParameter<std::string>("converterName");
+  }
+
+  template <typename DT>
+  std::shared_ptr<TritonConverterBase<DT>> createConverter() const { 
+    using ConverterType = std::shared_ptr<TritonConverterBase<DT>>;
+    //this construction catches bad any_cast without throwing std exception
+    if (auto ptr = std::any_cast<ConverterType>(&converter_)) {
+    } else { 
+      converter_ = ConverterType(TritonConverterFactory<DT>::get()->create(converterName_));
+      converter_clear = std::bind(&TritonConverterBase<DT>::clear, std::any_cast<ConverterType>(converter_).get());
+    }
+    return std::any_cast<ConverterType>(converter_);
+  }
+
   //helpers
   bool anyNeg(const ShapeView& vec) const {
     return std::any_of(vec.begin(), vec.end(), [](int64_t i) { return i < 0; });
@@ -108,6 +114,7 @@ private:
   std::shared_ptr<Result> result_;
   mutable std::any converter_;
   std::string converterName_;
+  mutable std::function<void()> converter_clear;
 };
 
 using TritonInputData = TritonData<nvidia::inferenceserver::client::InferInput>;

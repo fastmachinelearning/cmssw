@@ -340,7 +340,6 @@ inference::ModelStatistics TritonClient::getServerSideStatus() const {
 //for fillDescriptions
 void TritonClient::fillPSetDescription(edm::ParameterSetDescription& iDesc) {
   edm::ParameterSetDescription descConverter;
-  fillBasePSetDescription(descConverter);
   descConverter.add<std::string>("converterName");
   edm::ParameterSetDescription descClient;
   fillBasePSetDescription(descClient);

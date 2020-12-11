@@ -143,7 +143,7 @@ TritonOutput<DT> TritonOutputData::fromServer() const {
 
   auto converter = createConverter<DT>();
 
-  if (byteSize_ != sizeof(DT)) {
+  if (byteSize_ != converter->byteSize()) {
     throw cms::Exception("TritonDataError") << name_ << " output(): inconsistent byte size " << sizeof(DT)
                                             << " (should be " << byteSize_ << " for " << dname_ << ")";
   }

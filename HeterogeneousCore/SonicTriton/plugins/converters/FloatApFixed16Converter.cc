@@ -8,18 +8,18 @@ class FloatApFixed16Converter : public TritonConverterBase<float> {
 public:
   FloatApFixed16Converter() : TritonConverterBase<float>("FloatApFixed16F"+std::to_string(I)+"Converter", 2) {}
 
-  const uint8_t* convertIn(const float* in) const {
+  const uint8_t* convertIn(const float* in) const override {
     auto temp_vec = std::make_shared<std::vector<ap_fixed<16, I>>>(std::move(this->makeVecIn(in)));
     inputHolder_.push_back(temp_vec);
     return reinterpret_cast<const uint8_t*>(temp_vec->data());
   }
-  const float* convertOut(const uint8_t* in) const {
+  const float* convertOut(const uint8_t* in) const override {
     auto temp_vec = std::make_shared<std::vector<float>>(std::move(this->makeVecOut(reinterpret_cast<const ap_fixed<16, I>*>(in))));
     outputHolder_.push_back(temp_vec);
     return temp_vec->data();
   }
 
-  void clear() const {
+  void clear() const override {
     inputHolder_.clear();
     outputHolder_.clear();
   }

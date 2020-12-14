@@ -173,13 +173,13 @@ template <>
 void TritonInputData::reset() {
   data_->Reset();
   holder_.reset();
-  converter_clear();
+  converter_clear_();
 }
 
 template <>
 void TritonOutputData::reset() {
   result_.reset();
-  converter_clear();
+  converter_clear_();
 }
 
 //explicit template instantiation declarations

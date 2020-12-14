@@ -79,7 +79,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   if (!msg_str.empty())
     throw cms::Exception("ModelErrors") << msg_str;
 
-  const edm::ParameterSet& converterDefs = params.getParameterSet("converterDefinition");
+  const std::vector<edm::ParameterSet>& inputConverterDefs = params.getParameter<std::vector<edm::ParameterSet>>("inputConverters");
   //setup input map
   std::stringstream io_msg;
   if (verbose_)
@@ -91,7 +91,14 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
     auto [curr_itr, success] = input_.emplace(
         std::piecewise_construct, std::forward_as_tuple(iname), std::forward_as_tuple(iname, nicInput, noBatch_));
     auto& curr_input = curr_itr->second;
-    curr_input.setConverterParams(converterDefs);
+    bool foundConverter = false;
+    for (const auto converterDef : inputConverterDefs) {
+      if (converterDef.getParameter<std::string>("inputName") == iname) {
+        curr_input.setConverterParams(converterDef);
+        foundConverter = true;
+      }
+    }
+    if (!foundConverter) throw cms::Exception("ModelErrors") << "No matching converter definition for input: " << iname;
     inputsTriton_.push_back(curr_input.data());
     if (verbose_) {
       io_msg << "  " << iname << " (" << curr_input.dname() << ", " << curr_input.byteSize()
@@ -102,6 +109,8 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   //allow selecting only some outputs from server
   const auto& v_outputs = params.getUntrackedParameter<std::vector<std::string>>("outputs");
   std::unordered_set s_outputs(v_outputs.begin(), v_outputs.end());
+
+  const std::vector<edm::ParameterSet>& outputConverterDefs = params.getParameter<std::vector<edm::ParameterSet>>("outputConverters");
 
   //setup output map
   if (verbose_)
@@ -115,7 +124,14 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
     auto [curr_itr, success] = output_.emplace(
         std::piecewise_construct, std::forward_as_tuple(oname), std::forward_as_tuple(oname, nicOutput, noBatch_));
     auto& curr_output = curr_itr->second;
-    curr_output.setConverterParams(converterDefs);
+    bool foundConverter = false;
+    for (const auto converterDef : outputConverterDefs) {
+      if (converterDef.getParameter<std::string>("outputName") == oname) {
+        curr_output.setConverterParams(converterDef);
+        foundConverter = true;
+      }
+    }
+    if (!foundConverter) throw cms::Exception("ModelErrors") << "No matching converter definition for output: " << oname;
     outputsTriton_.push_back(curr_output.data());
     if (verbose_) {
       io_msg << "  " << oname << " (" << curr_output.dname() << ", " << curr_output.byteSize()
@@ -339,13 +355,18 @@ inference::ModelStatistics TritonClient::getServerSideStatus() const {
 
 //for fillDescriptions
 void TritonClient::fillPSetDescription(edm::ParameterSetDescription& iDesc) {
-  edm::ParameterSetDescription descConverter;
-  descConverter.add<std::string>("converterName");
+  edm::ParameterSetDescription descInConverter;
+  descInConverter.add<std::string>("converterName");
+  descInConverter.add<std::string>("inputName");
+  edm::ParameterSetDescription descOutConverter;
+  descOutConverter.add<std::string>("converterName");
+  descOutConverter.add<std::string>("outputName");
   edm::ParameterSetDescription descClient;
   fillBasePSetDescription(descClient);
   descClient.add<std::string>("modelName");
   descClient.add<std::string>("modelVersion", "");
-  descClient.add<edm::ParameterSetDescription>("converterDefinition", descConverter);
+  descClient.addVPSet("inputConverters", descInConverter);
+  descClient.addVPSet("outputConverters", descOutConverter);
   //server parameters should not affect the physics results
   descClient.addUntracked<unsigned>("batchSize");
   descClient.addUntracked<std::string>("address");

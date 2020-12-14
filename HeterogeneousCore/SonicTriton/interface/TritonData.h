@@ -83,7 +83,7 @@ private:
     if (auto ptr = std::any_cast<ConverterType>(&converter_)) {
     } else { 
       converter_ = ConverterType(TritonConverterFactory<DT>::get()->create(converterName_));
-      converter_clear = std::bind(&TritonConverterBase<DT>::clear, std::any_cast<ConverterType>(converter_).get());
+      converter_clear_ = std::bind(&TritonConverterBase<DT>::clear, std::any_cast<ConverterType>(converter_).get());
     }
     return std::any_cast<ConverterType>(converter_);
   }
@@ -114,7 +114,7 @@ private:
   std::shared_ptr<Result> result_;
   mutable std::any converter_;
   std::string converterName_;
-  mutable std::function<void()> converter_clear;
+  mutable std::function<void()> converter_clear_;
 };
 
 using TritonInputData = TritonData<nvidia::inferenceserver::client::InferInput>;

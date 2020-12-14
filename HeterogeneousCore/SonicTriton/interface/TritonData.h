@@ -61,6 +61,17 @@ public:
   //default to dims if shape isn't filled
   int64_t sizeShape() const { return variableDims_ ? dimProduct(shape_) : sizeDims(); }
 
+  std::string defaultConverter() const {
+    std::string base = "StandardConverter";
+    if (dname_ == "INT64") {
+      return "Int64"+base;
+    }
+    else if (dname_ == "FP32") {
+      return "Float"+base;
+    }
+    return "";
+  }
+
 private:
   friend class TritonClient;
 
@@ -72,8 +83,8 @@ private:
   void setResult(std::shared_ptr<Result> result) { result_ = result; }
   IO* data() { return data_.get(); }
 
-  void setConverterParams(const edm::ParameterSet& conf) {
-    converterName_ = conf.getParameter<std::string>("converterName");
+  void setConverterParams(std::string convName) {
+    converterName_ = convName;
   }
 
   template <typename DT>

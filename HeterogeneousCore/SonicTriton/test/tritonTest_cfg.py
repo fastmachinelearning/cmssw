@@ -49,8 +49,6 @@ process.TritonProducer = cms.EDProducer(options.producer,
         modelVersion = cms.string(""),
         verbose = cms.untracked.bool(options.verbose),
         allowedTries = cms.untracked.uint32(0),
-        inputConverters = inConvs[options.producer],
-        outputConverters = outConvs[options.producer],
     )
 )
 if options.producer=="TritonImageProducer":

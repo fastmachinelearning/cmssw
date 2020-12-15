@@ -29,40 +29,6 @@ models = {
   "TritonGraphProducer": "gat_test",
 }
 
-inConvs = {
-  "TritonImageProducer": cms.VPSet(
-                           cms.PSet(
-                             converterName = cms.string("FloatStandardConverter"),
-                             inputName = cms.string("gpu_0/data"),
-                           ),
-                         ),
-  "TritonGraphProducer": cms.VPSet(
-                           cms.PSet(
-                             converterName = cms.string("FloatStandardConverter"),
-                             inputName = cms.string("x__0"),
-                           ),
-                           cms.PSet(
-                             converterName = cms.string("Int64StandardConverter"),
-                             inputName = cms.string("edgeindex__1"),
-                           ),
-                         ),
-}
-
-outConvs = {
-  "TritonImageProducer": cms.VPSet(
-                           cms.PSet(
-                             converterName = cms.string("FloatStandardConverter"),
-                             outputName = cms.string("gpu_0/softmax"),
-                           ),
-                         ),
-  "TritonGraphProducer": cms.VPSet(
-                           cms.PSet(
-                             converterName = cms.string("FloatStandardConverter"),
-                             outputName = cms.string("logits__0"),
-                           ),
-                         ),
-}
-
 if options.producer not in models:
     raise ValueError("Unknown producer: "+options.producer)
 

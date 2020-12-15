@@ -61,17 +61,6 @@ public:
   //default to dims if shape isn't filled
   int64_t sizeShape() const { return variableDims_ ? dimProduct(shape_) : sizeDims(); }
 
-  std::string defaultConverter() const {
-    std::string base = "StandardConverter";
-    if (dname_ == "INT64") {
-      return "Int64"+base;
-    }
-    else if (dname_ == "FP32") {
-      return "Float"+base;
-    }
-    return "";
-  }
-
 private:
   friend class TritonClient;
 
@@ -83,7 +72,19 @@ private:
   void setResult(std::shared_ptr<Result> result) { result_ = result; }
   IO* data() { return data_.get(); }
 
-  void setConverterParams(std::string convName) {
+  std::string defaultConverter() const {
+    std::string base = "StandardConverter";
+    if (dtype_ == inference::DataType::TYPE_INT64) {
+      return "Int64"+base;
+    }
+    else if (dtype_ == inference::DataType::TYPE_FP32) {
+      return "Float"+base;
+    } else {
+      throw cms::Exception("ConverterErrors") << "Unable to create default converter for " << dname_ << " type\n";
+    }
+  }
+
+  void setConverterParams(const std::string& convName) {
     converterName_ = convName;
   }
 

@@ -81,7 +81,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
 
   const std::vector<edm::ParameterSet>& inputConverterDefs = params.getParameterSetVector("inputConverters");
   std::unordered_map<std::string,std::string> inConvMap;
-  for (const auto converterDef : inputConverterDefs) {
+  for (const auto& converterDef : inputConverterDefs) {
     inConvMap[converterDef.getParameter<std::string>("inputName")] = converterDef.getParameter<std::string>("converterName");
   }
 
@@ -114,7 +114,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
 
   const std::vector<edm::ParameterSet>& outputConverterDefs = params.getParameterSetVector("outputConverters");
   std::unordered_map<std::string,std::string> outConvMap;
-  for (const auto converterDef : outputConverterDefs) {
+  for (const auto& converterDef : outputConverterDefs) {
     outConvMap[converterDef.getParameter<std::string>("outputName")] = converterDef.getParameter<std::string>("converterName");
   }
 

@@ -79,7 +79,8 @@ private:
     }
     else if (dtype_ == inference::DataType::TYPE_FP32) {
       return "Float"+base;
-    } else {
+    } 
+    else {
       throw cms::Exception("ConverterErrors") << "Unable to create default converter for " << dname_ << " type\n";
     }
   }

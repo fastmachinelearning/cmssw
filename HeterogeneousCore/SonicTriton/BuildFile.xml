@@ -1,6 +1,7 @@
 <use name="FWCore/Utilities"/>
 <use name="FWCore/ParameterSet"/>
 <use name="FWCore/MessageLogger"/>
+<use name="DataFormats/Common"/>
 <use name="HeterogeneousCore/SonicCore"/>
 <use name="triton-inference-server"/>
 <use name="protobuf"/>

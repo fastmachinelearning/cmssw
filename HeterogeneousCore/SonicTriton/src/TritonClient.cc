@@ -79,6 +79,12 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   if (!msg_str.empty())
     throw cms::Exception("ModelErrors") << msg_str;
 
+  const std::vector<edm::ParameterSet>& inputConverterDefs = params.getParameterSetVector("inputConverters");
+  std::unordered_map<std::string,std::string> inConvMap;
+  for (const auto& converterDef : inputConverterDefs) {
+    inConvMap[converterDef.getParameter<std::string>("inputName")] = converterDef.getParameter<std::string>("converterName");
+  }
+
   //setup input map
   std::stringstream io_msg;
   if (verbose_)
@@ -86,10 +92,16 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
            << "\n";
   inputsTriton_.reserve(nicInputs.size());
   for (const auto& nicInput : nicInputs) {
-    const auto& iname = nicInput.name();
+    const std::string iname_full = nicInput.name();
+    const auto& [iname, iconverter] = TritonClient::splitNameConverter(iname_full);
     auto [curr_itr, success] = input_.emplace(
         std::piecewise_construct, std::forward_as_tuple(iname), std::forward_as_tuple(iname, nicInput, noBatch_));
     auto& curr_input = curr_itr->second;
+    if ( inConvMap.find(iname) == inConvMap.end() ) {
+      curr_input.setConverterParams(curr_input.defaultConverter(iconverter));
+    } else {
+      curr_input.setConverterParams(inConvMap[iname]);
+    }
     inputsTriton_.push_back(curr_input.data());
     if (verbose_) {
       io_msg << "  " << iname << " (" << curr_input.dname() << ", " << curr_input.byteSize()
@@ -101,18 +113,30 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   const auto& v_outputs = params.getUntrackedParameter<std::vector<std::string>>("outputs");
   std::unordered_set s_outputs(v_outputs.begin(), v_outputs.end());
 
+  const std::vector<edm::ParameterSet>& outputConverterDefs = params.getParameterSetVector("outputConverters");
+  std::unordered_map<std::string,std::string> outConvMap;
+  for (const auto& converterDef : outputConverterDefs) {
+    outConvMap[converterDef.getParameter<std::string>("outputName")] = converterDef.getParameter<std::string>("converterName");
+  }
+
   //setup output map
   if (verbose_)
     io_msg << "Model outputs: "
            << "\n";
   outputsTriton_.reserve(nicOutputs.size());
   for (const auto& nicOutput : nicOutputs) {
-    const auto& oname = nicOutput.name();
+    const std::string oname_full = nicOutput.name();
+    const auto& [oname, oconverter] = TritonClient::splitNameConverter(oname_full);
     if (!s_outputs.empty() and s_outputs.find(oname) == s_outputs.end())
       continue;
     auto [curr_itr, success] = output_.emplace(
         std::piecewise_construct, std::forward_as_tuple(oname), std::forward_as_tuple(oname, nicOutput, noBatch_));
     auto& curr_output = curr_itr->second;
+    if ( outConvMap.find(oname) == outConvMap.end() ) {
+      curr_output.setConverterParams(curr_output.defaultConverter(oconverter));
+    } else {
+      curr_output.setConverterParams(outConvMap[oname]);
+    }
     outputsTriton_.push_back(curr_output.data());
     if (verbose_) {
       io_msg << "  " << oname << " (" << curr_output.dname() << ", " << curr_output.byteSize()
@@ -336,10 +360,19 @@ inference::ModelStatistics TritonClient::getServerSideStatus() const {
 
 //for fillDescriptions
 void TritonClient::fillPSetDescription(edm::ParameterSetDescription& iDesc) {
+  edm::ParameterSetDescription descInConverter;
+  descInConverter.add<std::string>("converterName");
+  descInConverter.add<std::string>("inputName");
+  edm::ParameterSetDescription descOutConverter;
+  descOutConverter.add<std::string>("converterName");
+  descOutConverter.add<std::string>("outputName");
+  std::vector<edm::ParameterSet> blankVPSet;
   edm::ParameterSetDescription descClient;
   fillBasePSetDescription(descClient);
   descClient.add<std::string>("modelName");
   descClient.add<std::string>("modelVersion", "");
+  descClient.addVPSet("inputConverters", descInConverter, blankVPSet);
+  descClient.addVPSet("outputConverters", descOutConverter, blankVPSet);
   //server parameters should not affect the physics results
   descClient.addUntracked<unsigned>("batchSize");
   descClient.addUntracked<std::string>("address");

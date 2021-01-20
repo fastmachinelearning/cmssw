@@ -1,0 +1,5 @@
+<library name="HeterogeneousCoreSonicTritonPlugins_converters" file="converters/*.cc">
+  <use name="HeterogeneousCore/SonicTriton"/>
+  <use name="hls"/>
+  <flags EDM_PLUGIN="1"/>
+</library>

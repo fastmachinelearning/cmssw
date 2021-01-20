@@ -40,6 +40,15 @@ public:
   //for fillDescriptions
   static void fillPSetDescription(edm::ParameterSetDescription& iDesc);
 
+  static std::pair<std::string, std::string> splitNameConverter(const std::string& fullname) {
+    static const std::string indicator("_DataConverter:");
+    size_t dcpos = fullname.find(indicator);
+    if (dcpos != std::string::npos)
+      return {fullname.substr(0,dcpos), fullname.substr(dcpos+indicator.size())};
+    else
+      return {fullname, ""};
+  }
+
 protected:
   //helper
   bool getResults(std::shared_ptr<nvidia::inferenceserver::client::InferResult> results);

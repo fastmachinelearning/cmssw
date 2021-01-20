@@ -1,5 +1,6 @@
 #include "HeterogeneousCore/SonicTriton/interface/TritonData.h"
 #include "HeterogeneousCore/SonicTriton/interface/triton_utils.h"
+#include "HeterogeneousCore/SonicTriton/interface/TritonConverterBase.h"
 #include "FWCore/MessageLogger/interface/MessageLogger.h"
 
 #include "model_config.pb.h"
@@ -116,14 +117,16 @@ void TritonInputData::toServer(std::shared_ptr<TritonInput<DT>> ptr) {
   //shape must be specified for variable dims or if batch size changes
   data_->SetShape(fullShape_);
 
-  if (byteSize_ != sizeof(DT))
-    throw cms::Exception("TritonDataError") << name_ << " input(): inconsistent byte size " << sizeof(DT)
+  auto converter = createConverter<DT>();
+
+  if (byteSize_ != converter->byteSize())
+    throw cms::Exception("TritonDataError") << name_ << " input(): inconsistent byte size " << converter->byteSize()
                                             << " (should be " << byteSize_ << " for " << dname_ << ")";
 
   int64_t nInput = sizeShape();
   for (unsigned i0 = 0; i0 < batchSize_; ++i0) {
     const DT* arr = data_in[i0].data();
-    triton_utils::throwIfError(data_->AppendRaw(reinterpret_cast<const uint8_t*>(arr), nInput * byteSize_),
+    triton_utils::throwIfError(data_->AppendRaw(converter->convertIn(arr), nInput * byteSize_),
                                name_ + " input(): unable to set data for batch entry " + std::to_string(i0));
   }
 
@@ -138,7 +141,9 @@ TritonOutput<DT> TritonOutputData::fromServer() const {
     throw cms::Exception("TritonDataError") << name_ << " output(): missing result";
   }
 
-  if (byteSize_ != sizeof(DT)) {
+  auto converter = createConverter<DT>();
+
+  if (byteSize_ != converter->byteSize()) {
     throw cms::Exception("TritonDataError") << name_ << " output(): inconsistent byte size " << sizeof(DT)
                                             << " (should be " << byteSize_ << " for " << dname_ << ")";
   }
@@ -147,14 +152,14 @@ TritonOutput<DT> TritonOutputData::fromServer() const {
   TritonOutput<DT> dataOut;
   const uint8_t* r0;
   size_t contentByteSize;
-  size_t expectedContentByteSize = nOutput * byteSize_ * batchSize_;
+  size_t expectedContentByteSize = nOutput * converter->byteSize() * batchSize_;
   triton_utils::throwIfError(result_->RawData(name_, &r0, &contentByteSize), "output(): unable to get raw");
   if (contentByteSize != expectedContentByteSize) {
     throw cms::Exception("TritonDataError") << name_ << " output(): unexpected content byte size " << contentByteSize
                                             << " (expected " << expectedContentByteSize << ")";
   }
 
-  const DT* r1 = reinterpret_cast<const DT*>(r0);
+  const DT* r1 = converter->convertOut(r0);
   dataOut.reserve(batchSize_);
   for (unsigned i0 = 0; i0 < batchSize_; ++i0) {
     auto offset = i0 * nOutput;
@@ -168,11 +173,13 @@ template <>
 void TritonInputData::reset() {
   data_->Reset();
   holder_.reset();
+  converter_clear_();
 }
 
 template <>
 void TritonOutputData::reset() {
   result_.reset();
+  converter_clear_();
 }
 
 //explicit template instantiation declarations

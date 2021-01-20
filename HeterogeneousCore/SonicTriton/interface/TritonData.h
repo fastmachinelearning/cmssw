@@ -73,7 +73,7 @@ private:
   IO* data() { return data_.get(); }
 
   std::string defaultConverter(const std::string name) const {
-    if (name != "") {
+    if (!name.empty()) {
       return name;
     }
     else {

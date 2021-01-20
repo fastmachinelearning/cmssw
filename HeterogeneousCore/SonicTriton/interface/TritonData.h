@@ -73,9 +73,8 @@ private:
   IO* data() { return data_.get(); }
 
   std::string defaultConverter(const std::string name) const {
-    size_t dcpos = name.find("_DataConverter:");
-    if (dcpos != std::string::npos) {
-      return name.substr(dcpos+15);
+    if (name != "") {
+      return name;
     }
     else {
       std::string base = "StandardConverter";

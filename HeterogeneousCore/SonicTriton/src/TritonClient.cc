@@ -93,12 +93,12 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   inputsTriton_.reserve(nicInputs.size());
   for (const auto& nicInput : nicInputs) {
     const std::string iname_full = nicInput.name();
-    const auto& iname = iname_full.find("_DataConverter:") != std::string::npos ? iname_full.substr(0,iname_full.find("_DataConverter:")) : iname_full;
+    const auto& [iname, iconverter] = TritonClient::splitNameConverter(iname_full);
     auto [curr_itr, success] = input_.emplace(
         std::piecewise_construct, std::forward_as_tuple(iname), std::forward_as_tuple(iname, nicInput, noBatch_));
     auto& curr_input = curr_itr->second;
     if ( inConvMap.find(iname) == inConvMap.end() ) {
-      curr_input.setConverterParams(curr_input.defaultConverter(iname_full));
+      curr_input.setConverterParams(curr_input.defaultConverter(iconverter));
     } else {
       curr_input.setConverterParams(inConvMap[iname]);
     }
@@ -126,14 +126,14 @@ TritonClient::TritonClient(const edm::ParameterSet& params)
   outputsTriton_.reserve(nicOutputs.size());
   for (const auto& nicOutput : nicOutputs) {
     const std::string oname_full = nicOutput.name();
-    const auto& oname = oname_full.find("_DataConverter:") != std::string::npos ? oname_full.substr(0,oname_full.find("_DataConverter:")) : oname_full;
+    const auto& [oname, oconverter] = TritonClient::splitNameConverter(oname_full);
     if (!s_outputs.empty() and s_outputs.find(oname) == s_outputs.end())
       continue;
     auto [curr_itr, success] = output_.emplace(
         std::piecewise_construct, std::forward_as_tuple(oname), std::forward_as_tuple(oname, nicOutput, noBatch_));
     auto& curr_output = curr_itr->second;
     if ( outConvMap.find(oname) == outConvMap.end() ) {
-      curr_output.setConverterParams(curr_output.defaultConverter(oname_full));
+      curr_output.setConverterParams(curr_output.defaultConverter(oconverter));
     } else {
       curr_output.setConverterParams(outConvMap[oname]);
     }

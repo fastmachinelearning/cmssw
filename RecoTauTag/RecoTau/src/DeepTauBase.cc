@@ -52,35 +52,14 @@ namespace deep_tau {
     return fn_->Eval(0);
   }
 
-  std::unique_ptr<DeepTauBase::TauDiscriminator> DeepTauBase::Output::get_value(const edm::Handle<TauCollection>& taus,
-                                                                                const tensorflow::Tensor& pred,
-                                                                                const WPList* working_points,
-                                                                                bool is_online) const {
-    std::vector<reco::SingleTauDiscriminatorContainer> outputbuffer(taus->size());
+  float DeepTauBase::Output::get_number(const tensorflow::Tensor& pred, size_t tau_index, size_t elem) const {
+    return pred.matrix<float>()(tau_index, elem);
+  }
 
-    for (size_t tau_index = 0; tau_index < taus->size(); ++tau_index) {
-      float x = 0;
-      for (size_t num_elem : num_)
-        x += pred.matrix<float>()(tau_index, num_elem);
-      if (x != 0 && !den_.empty()) {
-        float den_val = 0;
-        for (size_t den_elem : den_)
-          den_val += pred.matrix<float>()(tau_index, den_elem);
-        x = den_val != 0 ? x / den_val : std::numeric_limits<float>::max();
-      }
-      outputbuffer[tau_index].rawValues.push_back(x);
-      if (working_points) {
-        for (const auto& wp : *working_points) {
-          const bool pass = x > (*wp)(taus->at(tau_index), is_online);
-          outputbuffer[tau_index].workingPoints.push_back(pass);
-        }
-      }
-    }
-    std::unique_ptr<TauDiscriminator> output = std::make_unique<TauDiscriminator>();
-    reco::TauDiscriminatorContainer::Filler filler(*output);
-    filler.insert(taus, outputbuffer.begin(), outputbuffer.end());
-    filler.fill();
-    return output;
+  float DeepTauBase::Output::get_number(const std::vector<std::vector<float>>& pred,
+                                        size_t tau_index,
+                                        size_t elem) const {
+    return pred.at(tau_index).at(elem);
   }
 
   DeepTauBase::DeepTauBase(const edm::ParameterSet& cfg,
@@ -251,3 +230,147 @@ namespace deep_tau {
   }
 
 }  // namespace deep_tau
+
+namespace deep_tau_2017 {
+
+  float getTauID(const pat::Tau& tau, const std::string& tauID, float default_value, bool assert_input) {
+    static tbb::concurrent_unordered_set<std::string> isFirstWarning;
+    if (tau.isTauIDAvailable(tauID)) {
+      return tau.tauID(tauID);
+    } else {
+      if (assert_input) {
+        throw cms::Exception("DeepTauId")
+            << "Exception in <getTauID>: No tauID '" << tauID << "' available in pat::Tau given as function argument.";
+      }
+      if (isFirstWarning.insert(tauID).second) {
+        edm::LogWarning("DeepTauID") << "Warning in <getTauID>: No tauID '" << tauID
+                                     << "' available in pat::Tau given as function argument."
+                                     << " Using default_value = " << default_value << " instead." << std::endl;
+      }
+      return default_value;
+    }
+  }
+
+  void MuonHitMatchV1::addMatchedMuon(const pat::Muon& muon, reco::BaseTau const& tau) {
+    static constexpr int n_stations = 4;
+
+    ++n_muons;
+    const double dR2 = reco::deltaR2(tau.p4(), muon.p4());
+    if (!best_matched_muon || dR2 < deltaR2_best_match) {
+      best_matched_muon = &muon;
+      deltaR2_best_match = dR2;
+    }
+
+    for (const auto& segment : muon.matches()) {
+      if (segment.segmentMatches.empty())
+        continue;
+      if (n_matches.count(segment.detector()))
+        ++n_matches.at(segment.detector()).at(segment.station() - 1);
+    }
+
+    if (muon.outerTrack().isNonnull()) {
+      const auto& hit_pattern = muon.outerTrack()->hitPattern();
+      for (int hit_index = 0; hit_index < hit_pattern.numberOfAllHits(reco::HitPattern::TRACK_HITS); ++hit_index) {
+        auto hit_id = hit_pattern.getHitPattern(reco::HitPattern::TRACK_HITS, hit_index);
+        if (hit_id == 0)
+          break;
+        if (hit_pattern.muonHitFilter(hit_id) && (hit_pattern.getHitType(hit_id) == TrackingRecHit::valid ||
+                                                  hit_pattern.getHitType(hit_id == TrackingRecHit::bad))) {
+          const int station = hit_pattern.getMuonStation(hit_id) - 1;
+          if (station > 0 && station < n_stations) {
+            std::vector<UInt_t>* muon_n_hits = nullptr;
+            if (hit_pattern.muonDTHitFilter(hit_id))
+              muon_n_hits = &n_hits.at(MuonSubdetId::DT);
+            else if (hit_pattern.muonCSCHitFilter(hit_id))
+              muon_n_hits = &n_hits.at(MuonSubdetId::CSC);
+            else if (hit_pattern.muonRPCHitFilter(hit_id))
+              muon_n_hits = &n_hits.at(MuonSubdetId::RPC);
+
+            if (muon_n_hits)
+              ++muon_n_hits->at(station);
+          }
+        }
+      }
+    }
+  }
+
+  unsigned MuonHitMatchV1::countMuonStationsWithMatches(size_t first_station, size_t last_station) const {
+    static const std::map<int, std::vector<bool>> masks = {
+        {MuonSubdetId::DT, {false, false, false, false}},
+        {MuonSubdetId::CSC, {true, false, false, false}},
+        {MuonSubdetId::RPC, {false, false, false, false}},
+    };
+    unsigned cnt = 0;
+    for (unsigned n = first_station; n <= last_station; ++n) {
+      for (const auto& match : n_matches) {
+        if (!masks.at(match.first).at(n) && match.second.at(n) > 0)
+          ++cnt;
+      }
+    }
+    return cnt;
+  }
+
+  unsigned MuonHitMatchV1::countMuonStationsWithHits(size_t first_station, size_t last_station) const {
+    static const std::map<int, std::vector<bool>> masks = {
+        {MuonSubdetId::DT, {false, false, false, false}},
+        {MuonSubdetId::CSC, {false, false, false, false}},
+        {MuonSubdetId::RPC, {false, false, false, false}},
+    };
+
+    unsigned cnt = 0;
+    for (unsigned n = first_station; n <= last_station; ++n) {
+      for (const auto& hit : n_hits) {
+        if (!masks.at(hit.first).at(n) && hit.second.at(n) > 0)
+          ++cnt;
+      }
+    }
+    return cnt;
+  }
+
+  template <>
+  CellObjectType GetCellObjectType(const pat::Electron&) {
+    return CellObjectType::Electron;
+  }
+
+  template <>
+  CellObjectType GetCellObjectType(const pat::Muon&) {
+    return CellObjectType::Muon;
+  }
+
+  template <>
+  CellObjectType GetCellObjectType(reco::Candidate const& cand) {
+    static const std::map<int, CellObjectType> obj_types = {{11, CellObjectType::PfCand_electron},
+                                                            {13, CellObjectType::PfCand_muon},
+                                                            {22, CellObjectType::PfCand_gamma},
+                                                            {130, CellObjectType::PfCand_neutralHadron},
+                                                            {211, CellObjectType::PfCand_chargedHadron}};
+
+    auto iter = obj_types.find(std::abs(cand.pdgId()));
+    if (iter == obj_types.end())
+      return CellObjectType::Other;
+    return iter->second;
+  }
+
+  bool CellGrid::tryGetCellIndex(double deltaEta, double deltaPhi, CellIndex& cellIndex) const {
+    const auto getCellIndex = [this](double x, double maxX, double size, int& index) {
+      const double absX = std::abs(x);
+      if (absX > maxX)
+        return false;
+      double absIndex;
+      if (disable_CellIndex_workaround_) {
+        // CV: use consistent definition for CellIndex
+        //     in DeepTauId.cc code and new DeepTau trainings
+        absIndex = std::floor(absX / size + 0.5);
+      } else {
+        // CV: backwards compatibility with DeepTau training v2p1 used during Run 2
+        absIndex = std::floor(std::abs(absX / size - 0.5));
+      }
+      index = static_cast<int>(std::copysign(absIndex, x));
+      return true;
+    };
+
+    return getCellIndex(deltaEta, maxDeltaEta(), cellSizeEta, cellIndex.eta) &&
+           getCellIndex(deltaPhi, maxDeltaPhi(), cellSizePhi, cellIndex.phi);
+  }
+
+}  // namespace deep_tau_2017

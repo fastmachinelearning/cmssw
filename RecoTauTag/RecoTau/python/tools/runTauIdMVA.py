@@ -36,6 +36,7 @@ class TauIDEmbedder(object):
                  },
                  tauIdDiscrMVA_2017_version = "v1",
                  conditionDB = "" # preparational DB: 'frontier://FrontierPrep/CMS_CONDITIONS'
+                 useSonic = False
                  ):
         super(TauIDEmbedder, self).__init__()
         self.process = process
@@ -59,6 +60,10 @@ class TauIDEmbedder(object):
             if discr not in TauIDEmbedder.availableDiscriminators:
                 raise RuntimeError('TauIDEmbedder: discriminator "{}" is not supported'.format(discr))
         self.toKeep = toKeep
+        self.useSonic = useSonic
+        if self.useSonic:
+            # only implemented Sonic DeepTau for deepTau2017v2p1 exclusively
+            assert self.toKeep == ["deepTau2017v2p1"], 'Currently Sonic version only supports "deepTau2017v2p1"'
 
     
     @staticmethod
@@ -715,20 +720,26 @@ class TauIDEmbedder(object):
                 'inner:RecoTauTag/TrainingFiles/data/DeepTauId/deepTau_2017v2p6_e6_inner.pb',
                 'outer:RecoTauTag/TrainingFiles/data/DeepTauId/deepTau_2017v2p6_e6_outer.pb',
             ]
-            setattr(self.process,_deepTauName+self.postfix,cms.EDProducer("DeepTauId",
-                electrons                = cms.InputTag('slimmedElectrons'),
-                muons                    = cms.InputTag('slimmedMuons'),
-                taus                     = cms.InputTag(self.originalTauName),
-                pfcands                  = cms.InputTag('packedPFCandidates'),
-                vertices                 = cms.InputTag('offlineSlimmedPrimaryVertices'),
-                rho                      = cms.InputTag('fixedGridRhoAll'),
-                graph_file               = cms.vstring(file_names),
-                mem_mapped               = cms.bool(False),
-                version                  = cms.uint32(self.getDeepTauVersion(file_names[0])[1]),
-                debug_level              = cms.int32(0),
-                disable_dxy_pca          = cms.bool(True),
-                is_online                = cms.bool(False)
-            ))
+            if not self.useSonic:
+                # run the direct inference if not on sonic
+                setattr(self.process,_deepTauName+self.postfix,cms.EDProducer("DeepTauId",
+                    electrons                = cms.InputTag('slimmedElectrons'),
+                    muons                    = cms.InputTag('slimmedMuons'),
+                    taus                     = cms.InputTag(self.originalTauName),
+                    pfcands                  = cms.InputTag('packedPFCandidates'),
+                    vertices                 = cms.InputTag('offlineSlimmedPrimaryVertices'),
+                    rho                      = cms.InputTag('fixedGridRhoAll'),
+                    graph_file               = cms.vstring(file_names),
+                    mem_mapped               = cms.bool(False),
+                    version                  = cms.uint32(self.getDeepTauVersion(file_names[0])[1]),
+                    debug_level              = cms.int32(0),
+                    disable_dxy_pca          = cms.bool(True),
+                    is_online                = cms.bool(False)
+                ))
+            else:
+                print("running deeptau with SONIC")
+                from RecoTauTag.RecoTau.deeptauIdSonicProducer_cff import sonic_deeptau
+                setattr(self.process,_deepTauName+self.postfix, sonic_deeptau.clone())
 
             self.processDeepProducer(_deepTauName, tauIDSources, workingPoints_)
 

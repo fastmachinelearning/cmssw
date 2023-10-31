@@ -20,7 +20,7 @@ PARENTPID=""
 BASEPORT=8000
 AUTOPORT=""
 NPORTS=3
-IMAGE=fastml/triton-torchgeo:22.07-py3-geometric
+IMAGE=fastml/triton-torchgeo:23.09-py3-geometric
 SANDBOX=""
 COMPAT_USR=""
 
@@ -382,6 +382,10 @@ EOF
 parameters { key: "TF_NUM_INTRA_THREADS" value: { string_value: "1" } }
 parameters { key: "TF_NUM_INTER_THREADS" value: { string_value: "1" } }
 parameters { key: "TF_USE_PER_SESSION_THREADS" value: { string_value: "1" } }
+EOF
+        elif [[ $PLATFORM == *"libtorch"* ]]; then
+            cat <<EOF >> $CONFIG
+parameters { key: "INTRA_OP_THREAD_COUNT" value: { string_value: "1" } }
 EOF
 		else
 			echo "Warning: thread (instance) control not implemented for $PLATFORM"

@@ -1,6 +1,8 @@
 #ifndef RecoBTag_ONNXRuntime_tensor_configs_h
 #define RecoBTag_ONNXRuntime_tensor_configs_h
 
+#include <map>
+
 namespace deepflavour {
 
   constexpr unsigned n_features_global = 15;
@@ -28,4 +30,85 @@ namespace deepvertex {
 
 }  // namespace deepvertex
 
+namespace parT {
+
+  enum InputFeatures {
+    kBegin=0,
+    kChargedCandidates=kBegin,
+    kNeutralCandidates=1,
+    kVertices=2,
+    kChargedCandidates4Vec=3,
+    kNeutralCandidates4Vec=4,
+    kVertices4Vec=5,
+    kEnd=6
+  };
+
+  constexpr unsigned n_cpf_accept = 25;
+  constexpr unsigned n_npf_accept = 25;
+  constexpr unsigned n_sv_accept = 5;
+
+  const std::map<InputFeatures, unsigned int> N_InputFeatures{
+    {kChargedCandidates, 16},
+    {kNeutralCandidates, 8},
+    {kVertices, 14},
+    {kChargedCandidates4Vec, 4},
+    {kNeutralCandidates4Vec, 4},
+    {kVertices4Vec, 4}
+  };
+
+  const std::map<InputFeatures, unsigned int> N_AcceptedFeatures{
+    {kChargedCandidates, n_cpf_accept},
+    {kNeutralCandidates, n_npf_accept},
+    {kVertices, n_sv_accept},
+    {kChargedCandidates4Vec, n_cpf_accept},
+    {kNeutralCandidates4Vec, n_npf_accept},
+    {kVertices4Vec, n_sv_accept}
+  };
+
+} // namespace parT
+
+
+namespace UparT {
+
+  enum InputFeatures {
+    kBegin=0,
+    kChargedCandidates=kBegin,
+    kLostTracks = 1,
+    kNeutralCandidates=2,
+    kVertices=3,
+    kChargedCandidates4Vec=4,
+    kLostTracks4Vec=5,
+    kNeutralCandidates4Vec=6,
+    kVertices4Vec=7,
+    kEnd=8
+  };
+
+  constexpr unsigned n_cpf_accept = 29;
+  constexpr unsigned n_lt_accept = 5;
+  constexpr unsigned n_npf_accept = 25;
+  constexpr unsigned n_sv_accept = 5;
+
+  const std::map<InputFeatures, unsigned int> N_InputFeatures{
+    {kChargedCandidates, 25},
+    {kLostTracks, 18},
+    {kNeutralCandidates, 8},
+    {kVertices, 14},
+    {kChargedCandidates4Vec, 4},
+    {kLostTracks4Vec, 4},
+    {kNeutralCandidates4Vec, 4},
+    {kVertices4Vec, 4}
+  };
+
+  const std::map<InputFeatures, unsigned int> N_AcceptedFeatures{
+    {kChargedCandidates, n_cpf_accept},
+    {kLostTracks, n_lt_accept},
+    {kNeutralCandidates, n_npf_accept},
+    {kVertices, n_sv_accept},
+    {kChargedCandidates4Vec, n_cpf_accept},
+    {kLostTracks4Vec, n_lt_accept},
+    {kNeutralCandidates4Vec, n_npf_accept},
+    {kVertices4Vec, n_sv_accept}
+  };
+
+} // namespace UparT
 #endif

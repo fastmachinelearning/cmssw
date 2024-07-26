@@ -136,6 +136,8 @@ void UnifiedParticleTransformerAK4SonicJetTagsProducer::acquire(edm::Event const
       auto &vdata = (*tdata)[jet_n];
       if (ifeature == UparT::kChargedCandidates || ifeature == UparT::kChargedCandidates4Vec) 
         UparT_tensor_filler(vdata, ifeature, features.c_pf_features, target_n_cpf);
+      else if (ifeature == UparT::kLostTracks || ifeature == UparT::kLostTracks4Vec)
+        UparT_tensor_filler(vdata, ifeature, features.lt_features, target_n_lt);
       else if (ifeature == UparT::kNeutralCandidates || ifeature == UparT::kNeutralCandidates4Vec) 
         UparT_tensor_filler(vdata, ifeature, features.n_pf_features, target_n_npf);
       else if (ifeature == UparT::kVertices || ifeature == UparT::kVertices4Vec)

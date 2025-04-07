@@ -7,9 +7,9 @@ void RetrySameServerAction::retry() {
   if (tries_ < allowedTries_) {
     eval();
     return;
-  }else{
-     shouldRetry_ = false;  // Flip flag when max retries are reached
-     edm::LogInfo("RetrySameServerAction") << "Max retry attempts reached. No further retries.";
+  } else {
+    shouldRetry_ = false;  // Flip flag when max retries are reached
+    edm::LogInfo("RetrySameServerAction") << "Max retry attempts reached. No further retries.";
   }
 }
 

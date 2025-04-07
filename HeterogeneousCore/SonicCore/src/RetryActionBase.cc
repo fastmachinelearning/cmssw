@@ -1,7 +1,8 @@
 #include "HeterogeneousCore/SonicCore/interface/RetryActionBase.h"
 
 // Constructor implementation
-RetryActionBase::RetryActionBase(const edm::ParameterSet& conf, SonicClientBase* client) : client_(client), shouldRetry_(true)  {}
+RetryActionBase::RetryActionBase(const edm::ParameterSet& conf, SonicClientBase* client)
+    : client_(client), shouldRetry_(true) {}
 
 void RetryActionBase::eval() {
   if (client_) {

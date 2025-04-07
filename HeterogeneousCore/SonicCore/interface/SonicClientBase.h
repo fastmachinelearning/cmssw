@@ -57,12 +57,12 @@ protected:
   SonicMode mode_;
   bool verbose_;
   std::unique_ptr<SonicDispatcher> dispatcher_;
-  unsigned allowedTries_, tries_;
+  unsigned totalTries_;
   std::optional<edm::WaitingTaskWithArenaHolder> holder_;
 
   // Use a unique_ptr with a custom deleter to avoid incomplete type issues
   struct RetryDeleter {
-      void operator()(RetryActionBase* ptr) const;
+    void operator()(RetryActionBase* ptr) const;
   };
 
   using RetryActionPtr = std::unique_ptr<RetryActionBase, RetryDeleter>;

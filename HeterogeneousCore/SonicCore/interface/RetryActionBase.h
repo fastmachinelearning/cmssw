@@ -1,5 +1,5 @@
-#ifndef RETRY_ACTION_BASE_H
-#define RETRY_ACTION_BASE_H
+#ifndef HeterogeneousCore_SonicCore_RetryActionBase
+#define HeterogeneousCore_SonicCore_RetryActionBase
 
 #include "FWCore/PluginManager/interface/PluginFactory.h"
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
@@ -19,7 +19,7 @@ public:
   virtual void start() = 0;  // Pure virtual function for execution logic for initialization
 
 protected:
-  void eval();               // interface for calling evaluate in client
+  void eval();  // interface for calling evaluate in client
 
 protected:
   SonicClientBase* client_;
@@ -30,4 +30,4 @@ protected:
 using RetryActionFactory =
     edmplugin::PluginFactory<RetryActionBase*(const edm::ParameterSet&, SonicClientBase* client)>;
 
-#endif  // RETRY_ACTION_BASE_H
+#endif

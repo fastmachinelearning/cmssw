@@ -123,9 +123,14 @@ for im,module in enumerate(options.modules):
                 modelVersion = cms.string(""),
                 modelConfigPath = cms.FileInPath("HeterogeneousCore/SonicTriton/data/models/{}/config.pbtxt".format(model)),
                 verbose = cms.untracked.bool(options.verbose or options.verboseClient),
-                allowedTries = cms.untracked.uint32(options.tries),
                 useSharedMemory = cms.untracked.bool(not options.noShm),
                 compression = cms.untracked.string(options.compression),
+                Retry = cms.VPSet(
+                  cms.PSet(
+                    retryType = cms.string('RetrySameServerAction'),
+                    allowedTries = cms.untracked.uint32(options.tries)
+                  )
+                )
             )
         )
     )

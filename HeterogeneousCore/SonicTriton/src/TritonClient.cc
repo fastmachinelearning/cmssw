@@ -369,7 +369,7 @@ void TritonClient::getResults(const std::vector<std::shared_ptr<tc::InferResult>
 //default case for sync and pseudo async
 void TritonClient::evaluate() {
   //undo previous signal from TritonException
-  if (tries_ > 0) {
+  if (totalTries_ > 0) {
     // If we are retrying then the evaluate method is called outside the frameworks TBB thread pool.
     // So we need to setup the service token for the current thread to access the service registry.
     edm::ServiceRegistry::Operate op(token_);

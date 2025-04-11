@@ -24,7 +24,7 @@ SonicClientBase::SonicClientBase(const edm::ParameterSet& params,
       //Convert to  RetryActionPtr Type from raw pointer of retryAction
       retryActions_.emplace_back(RetryActionPtr(retryAction.release()));
     } else {
-      throw cms::Exception("Configuration") << "Unknown Retry type" << actionType << " for SonicClient: " << modeName;
+      throw cms::Exception("Configuration") << "Unknown Retry type " << actionType << " for SonicClient: " << modeName;
     }
   }
 
@@ -67,8 +67,6 @@ void SonicClientBase::finish(bool success, std::exception_ptr eptr) {
   //retries are only allowed if no exception was raised
   if (!success and !eptr) {
     ++totalTries_;
-    // Check if any retry actions are still valid
-    bool anyRetryAllowed = false;
     for (const auto& action : retryActions_) {
       if (action->shouldRetry()) {
         action->retry();  // Call retry only if shouldRetry_ is true
@@ -76,13 +74,11 @@ void SonicClientBase::finish(bool success, std::exception_ptr eptr) {
       }
     }
     //prepare an exception if no more retries left
-    if (!anyRetryAllowed) {
-      edm::LogInfo("SonicClientBase") << "SonicCallFailed: call failed, no retry actions available after "
-                                      << totalTries_ << " tries.";
-      edm::Exception ex(edm::errors::ExternalFailure);
-      ex << "SonicCallFailed: call failed, no retry actions available after  " << totalTries_ << " tries.";
-      eptr = make_exception_ptr(ex);
-    }
+    edm::LogInfo("SonicClientBase") << "SonicCallFailed: call failed, no retry actions available after " << totalTries_
+                                    << " tries.";
+    edm::Exception ex(edm::errors::ExternalFailure);
+    ex << "SonicCallFailed: call failed, no retry actions available after  " << totalTries_ << " tries.";
+    eptr = make_exception_ptr(ex);
   }
   if (holder_) {
     holder_->doneWaiting(eptr);
@@ -103,6 +99,7 @@ void SonicClientBase::fillBasePSetDescription(edm::ParameterSetDescription& desc
     // Defines the structure of each entry in the VPSet
     edm::ParameterSetDescription retryDesc;
     retryDesc.add<std::string>("retryType", "RetrySameServerAction");
+    retryDesc.addUntracked<unsigned>("allowedTries", 0);
 
     // Define a default retry action
     edm::ParameterSet defaultRetry;

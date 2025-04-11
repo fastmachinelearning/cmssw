@@ -19,7 +19,6 @@ process.maxEvents.input = 1
 
 process.options.numberOfThreads = 2
 process.options.numberOfStreams = 0
-
 process.dummySync = _moduleClass(_moduleName,
     input = cms.int32(1),
     Client = cms.PSet(

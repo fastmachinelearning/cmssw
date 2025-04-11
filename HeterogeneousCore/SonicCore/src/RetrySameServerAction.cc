@@ -13,4 +13,4 @@ void RetrySameServerAction::retry() {
   }
 }
 
-DEFINE_EDM_PLUGIN(RetryActionFactory, RetrySameServerAction, "RetrySameServerAction");
+DEFINE_RETRY_ACTION(RetrySameServerAction)

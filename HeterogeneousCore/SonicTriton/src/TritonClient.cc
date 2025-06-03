@@ -61,7 +61,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params, const std::string& d
       useSharedMemory_(params.getUntrackedParameter<bool>("useSharedMemory")),
       compressionAlgo_(getCompressionAlgo(params.getUntrackedParameter<std::string>("compression"))) {
   options_.emplace_back(params.getParameter<std::string>("modelName"));
-  //get appropriate server for this model
+
   edm::Service<TritonService> ts;
 
   // We save the token to be able to notify the service in case of an exception in the evaluate method.
@@ -70,22 +70,9 @@ TritonClient::TritonClient(const edm::ParameterSet& params, const std::string& d
   // create the context.
   token_ = edm::ServiceRegistry::instance().presentToken();
 
-  const auto& server =
-      ts->serverInfo(options_[0].model_name_, params.getUntrackedParameter<std::string>("preferredServer"));
-  serverType_ = server.type;
-  edm::LogInfo("TritonDiscovery") << debugName_ << " assigned server: " << server.url;
-  //enforce sync mode for fallback CPU server to avoid contention
-  //todo: could enforce async mode otherwise (unless mode was specified by user?)
-  if (serverType_ == TritonServerType::LocalCPU)
-    setMode(SonicMode::Sync);
-  isLocal_ = serverType_ == TritonServerType::LocalCPU or serverType_ == TritonServerType::LocalGPU;
-
-  //connect to the server
-  TRITON_THROW_IF_ERROR(
-      tc::InferenceServerGrpcClient::Create(&client_, server.url, false, server.useSsl, server.sslOptions),
-      "TritonClient(): unable to create inference context",
-      isLocal_);
-
+  //Connect to server
+  updateServer(params.getUntrackedParameter<std::string>("preferredServer"));
+  
   //set options
   options_[0].model_version_ = params.getParameter<std::string>("modelVersion");
   options_[0].client_timeout_ = params.getUntrackedParameter<unsigned>("timeout");
@@ -572,6 +559,26 @@ inference::ModelStatistics TritonClient::getServerSideStatus() const {
     return *(resp.model_stats().begin());
   }
   return inference::ModelStatistics{};
+}
+
+void TritonClient::updateServer(std::string serverName){
+      //get appropriate server for this model
+      edm::Service<TritonService> ts;
+
+      const auto& server = ts->serverInfo(options_[0].model_name_, serverName);
+      serverType_ = server.type;
+      edm::LogInfo("TritonDiscovery") << debugName_ << " assigned server: " << server.url;
+      //enforce sync mode for fallback CPU server to avoid contention
+      //todo: could enforce async mode otherwise (unless mode was specified by user?)
+      if (serverType_ == TritonServerType::LocalCPU)
+        setMode(SonicMode::Sync);
+      isLocal_ = serverType_ == TritonServerType::LocalCPU or serverType_ == TritonServerType::LocalGPU;
+    
+      //connect to the server
+      TRITON_THROW_IF_ERROR(
+          tc::InferenceServerGrpcClient::Create(&client_, server.url, false, server.useSsl, server.sslOptions),
+          "TritonClient(): unable to create inference context",
+          isLocal_);
 }
 
 //for fillDescriptions

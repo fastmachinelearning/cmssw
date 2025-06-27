@@ -65,6 +65,7 @@ protected:
   bool handle_exception(F&& call);
 
   void reportServerSideStats(const ServerSideStats& stats) const;
+  void updateServer(std::string serverName);
   ServerSideStats summarizeServerStats(const inference::ModelStatistics& start_status,
                                        const inference::ModelStatistics& end_status) const;
 

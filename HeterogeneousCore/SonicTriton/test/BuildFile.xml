@@ -1,5 +1,6 @@
 <test name="TestHeterogeneousCoreSonicTritonProducerCPU" command="unittest.sh ${LOCALTOP} CPU"/>
 <test name="TestHeterogeneousCoreSonicTritonProducerGPU" command="unittest.sh ${LOCALTOP} GPU"/>
+<test name="TestHeterogeneousCoreSonicTritonRetryAction" command="unittest.sh ${LOCALTOP} CPU tritonRetryActionTest_cfg.py"/>
 <test name="TestHeterogeneousCoreSonicTritonVersionCheck" command="cmsTritonConfigTool versioncheck">
   <use name="cmsswdata"/>
 </test>

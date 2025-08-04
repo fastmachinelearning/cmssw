@@ -7,9 +7,13 @@
 <use name="HeterogeneousCore/CUDAUtilities"/>
 <use name="triton-inference-client"/>
 <use name="protobuf"/>
+<use name="catch2"/>
 <iftool name="cuda">
   <use name="cuda"/>
 </iftool>
+
 <export>
-  <lib   name="1"/>
+  <lib name="1"/>
 </export>
+
+<test name="RetryActionDiffServer_test" command="RetryActionDiffServer.cc"/>

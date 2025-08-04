@@ -50,18 +50,31 @@ public:
   void reset() override;
   TritonServerType serverType() const { return serverType_; }
   bool isLocal() const { return isLocal_; }
-  void connectToServer(const std::string& url);
+  virtual void connectToServer(const std::string& url);
 
   //for fillDescriptions
   static void fillPSetDescription(edm::ParameterSetDescription& iDesc);
 
 protected:
+  /**
+   * @brief Constructor for unit testing purposes only.
+   *
+   * This constructor is provided to allow the creation of a TritonClient
+   * instance (or a mock derived from it) without needing the full CMSSW
+   * Service framework, which is required by the standard constructor.
+   * This is essential for writing isolated unit tests that do not depend
+   * on external services. It initializes the base SonicClient with dummy
+   * parameters.
+   * @param is_testing A boolean flag to select this constructor.
+   */
+  TritonClient(bool is_testing);
+
   //helpers
   bool noOuterDim() const { return noOuterDim_; }
   unsigned outerDim() const { return outerDim_; }
   unsigned nEntries() const;
   void getResults(const std::vector<std::shared_ptr<triton::client::InferResult>>& results);
-  void evaluate() override;
+  virtual void evaluate() override;
   template <typename F>
   bool handle_exception(F&& call);
 

@@ -591,3 +591,22 @@ void TritonClient::fillPSetDescription(edm::ParameterSetDescription& iDesc) {
   descClient.addUntracked<std::vector<std::string>>("outputs", {});
   iDesc.add<edm::ParameterSetDescription>("Client", descClient);
 }
+
+void TritonClient::connectToServer(const std::string& url) {
+  // Update client state for a generic remote server
+  serverType_ = TritonServerType::Remote;
+  isLocal_ = false;
+
+  edm::LogInfo("TritonDiscovery") << debugName_ << " connecting to server: " << url;
+
+  // Use default SSL options
+  triton::client::SslOptions sslOptions;
+  bool useSsl = false; // Assuming no SSL for direct URL connection
+
+  // Connect to the server
+  TRITON_THROW_IF_ERROR(
+      triton::client::InferenceServerGrpcClient::Create(&client_, url, false, useSsl, sslOptions),
+      "TritonClient::connectToServer(): unable to create inference context",
+      false // isLocal is false
+  );
+}

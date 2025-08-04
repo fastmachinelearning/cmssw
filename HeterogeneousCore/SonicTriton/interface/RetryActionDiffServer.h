@@ -14,7 +14,7 @@ public:
 private:
   std::string diff_server_url_;
   std::string diff_server_token_;
-};
+}; 
 
 #endif
 

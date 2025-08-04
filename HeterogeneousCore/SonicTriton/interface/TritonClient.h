@@ -32,13 +32,13 @@ public:
     uint64_t compute_output_time_ns_;
   };
 
-  //constructor
+  // constructor
   TritonClient(const edm::ParameterSet& params, const std::string& debugName);
 
-  //destructor
+  // destructor
   ~TritonClient() override;
 
-  //accessors
+  // accessors
   unsigned batchSize() const;
   TritonBatchMode batchMode() const { return batchMode_; }
   bool verbose() const { return verbose_; }
@@ -50,28 +50,42 @@ public:
   void reset() override;
   TritonServerType serverType() const { return serverType_; }
   bool isLocal() const { return isLocal_; }
-  void connectToServer(const std::string& url);
+  virtual void connectToServer(const std::string& url);
 
-  //for fillDescriptions
+  // for fillDescriptions
   static void fillPSetDescription(edm::ParameterSetDescription& iDesc);
 
 protected:
-  //helpers
+  /**
+   * @brief Constructor for unit testing purposes only.
+   *
+   * This constructor is provided to allow the creation of a TritonClient
+   * instance (or a mock derived from it) without needing the full CMSSW
+   * Service framework, which is required by the standard constructor.
+   * This is essential for writing isolated unit tests that do not depend
+   * on external services. It initializes the base SonicClient with dummy
+   * parameters.
+   * @param is_testing A boolean flag to select this constructor.
+   */
+  TritonClient(bool is_testing);
+
+  // helpers
   bool noOuterDim() const { return noOuterDim_; }
   unsigned outerDim() const { return outerDim_; }
   unsigned nEntries() const;
   void getResults(const std::vector<std::shared_ptr<triton::client::InferResult>>& results);
-  void evaluate() override;
+  virtual void evaluate() override;
   template <typename F>
   bool handle_exception(F&& call);
 
   void reportServerSideStats(const ServerSideStats& stats) const;
+  void updateServer(std::string serverName);
   ServerSideStats summarizeServerStats(const inference::ModelStatistics& start_status,
                                        const inference::ModelStatistics& end_status) const;
 
   inference::ModelStatistics getServerSideStatus() const;
 
-  //members
+  // members
   unsigned maxOuterDim_;
   unsigned outerDim_;
   bool noOuterDim_;
@@ -86,7 +100,7 @@ protected:
   triton::client::Headers headers_;
 
   std::unique_ptr<triton::client::InferenceServerGrpcClient> client_;
-  //stores timeout, model name and version
+  // stores timeout, model name and version
   std::vector<triton::client::InferOptions> options_;
   edm::ServiceToken token_;
 
@@ -94,7 +108,7 @@ private:
   friend TritonInputData;
   friend TritonOutputData;
 
-  //private accessors only used by data
+  // private accessors only used by data
   auto client() { return client_.get(); }
   void addEntry(unsigned entry);
   void resizeEntries(unsigned entry);

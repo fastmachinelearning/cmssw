@@ -25,8 +25,8 @@ public:
   void start() override;
 
 private:
-  std::string diff_server_url_;
-  std::string diff_server_token_;
+  std::string alt_server_url_;
+  std::string alt_server_token_;
 }; 
 
 #endif

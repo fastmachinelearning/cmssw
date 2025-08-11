@@ -7,9 +7,7 @@
 
 #include <string>
 
-// Anonymous namespace to hold our mock object, keeping it local to this test file.
 namespace {
-    // Mock TritonClient to intercept and verify method calls without needing a real server or CMSSW services.
     class MockTritonClient : public TritonClient {
     public:
         // Use the protected, testing-only constructor from the base class.

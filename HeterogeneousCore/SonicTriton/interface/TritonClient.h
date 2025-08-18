@@ -51,6 +51,7 @@ public:
   TritonServerType serverType() const { return serverType_; }
   bool isLocal() const { return isLocal_; }
   virtual void connectToServer(const std::string& url);
+  void updateServer(std::string serverName);
 
   //for fillDescriptions
   static void fillPSetDescription(edm::ParameterSetDescription& iDesc);
@@ -79,7 +80,6 @@ protected:
   bool handle_exception(F&& call);
 
   void reportServerSideStats(const ServerSideStats& stats) const;
-  void updateServer(std::string serverName);
   ServerSideStats summarizeServerStats(const inference::ModelStatistics& start_status,
                                        const inference::ModelStatistics& end_status) const;
 

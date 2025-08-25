@@ -51,24 +51,14 @@ public:
   TritonServerType serverType() const { return serverType_; }
   bool isLocal() const { return isLocal_; }
   virtual void connectToServer(const std::string& url);
-  void updateServer(std::string serverName);
+  virtual void updateServer(std::string serverName);
 
   //for fillDescriptions
   static void fillPSetDescription(edm::ParameterSetDescription& iDesc);
 
 protected:
-  /**
-   * @brief Constructor for unit testing purposes only.
-   *
-   * This constructor is provided to allow the creation of a TritonClient
-   * instance (or a mock derived from it) without needing the full CMSSW
-   * Service framework, which is required by the standard constructor.
-   * This is essential for writing isolated unit tests that do not depend
-   * on external services. It initializes the base SonicClient with dummy
-   * parameters.
-   * @param is_testing A boolean flag to select this constructor.
-   */
-  TritonClient(bool is_testing);
+  // Protected default constructor for unit testing (no framework services)
+  TritonClient();
 
   //helpers
   bool noOuterDim() const { return noOuterDim_; }

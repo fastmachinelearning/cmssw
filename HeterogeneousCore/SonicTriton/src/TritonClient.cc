@@ -28,6 +28,19 @@
 namespace tc = triton::client;
 
 namespace {
+  // Minimal ParameterSet to satisfy SonicClientBase requirements during unit tests
+  edm::ParameterSet makeMinimalSonicParamsForTest() {
+    edm::ParameterSet params;
+    params.addParameter<std::string>("mode", "PseudoAsync");
+
+    edm::ParameterSet defaultRetry;
+    defaultRetry.addParameter<std::string>("retryType", "RetrySameServerAction");
+    defaultRetry.addUntrackedParameter<unsigned>("allowedTries", 0u);
+    std::vector<edm::ParameterSet> retryVec{defaultRetry};
+    params.addParameter<std::vector<edm::ParameterSet>>("Retry", retryVec);
+
+    return params;
+  }
   grpc_compression_algorithm getCompressionAlgo(const std::string& name) {
     if (name.empty() or name.compare("none") == 0)
       return grpc_compression_algorithm::GRPC_COMPRESS_NONE;
@@ -619,5 +632,5 @@ void TritonClient::connectToServer(const std::string& url) {
 }
 
 //constructor for testing
-TritonClient::TritonClient(bool /*is_testing*/) : SonicClient(edm::ParameterSet(), "TritonClient_test", "TritonClient") {}
+TritonClient::TritonClient() : SonicClient(makeMinimalSonicParamsForTest(), "TritonClient_test", "TritonClient") {}
 

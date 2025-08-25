@@ -45,6 +45,7 @@ parser.add_argument("--ssl", default=False, action="store_true", help="enable SS
 parser.add_argument("--device", default="auto", type=str.lower, choices=allowed_devices, help="specify device for fallback server")
 parser.add_argument("--container", default="apptainer", type=str.lower, choices=allowed_containers, help="specify container for fallback server")
 parser.add_argument("--tries", default=0, type=int, help="number of retries for failed request")
+parser.add_argument("--retryAction", default="same", type=str, choices=["same","diff"], help="retry policy: same server or different server")
 options = parser.parse_args()
 
 if len(options.params)>0:
@@ -108,6 +109,9 @@ if options.verbose or options.verboseClient:
     keepMsgs.append('TritonClient')
 if options.verbose or options.verboseService:
     keepMsgs.append('TritonService')
+if options.verbose:
+    # ensure RetryActionDiffServer messages are not suppressed if emitted
+    keepMsgs.append('RetryActionDiffServer')
 
 for im,module in enumerate(options.modules):
     model = options.models[im]
@@ -125,10 +129,16 @@ for im,module in enumerate(options.modules):
                 verbose = cms.untracked.bool(options.verbose or options.verboseClient),
                 useSharedMemory = cms.untracked.bool(not options.noShm),
                 compression = cms.untracked.string(options.compression),
-                Retry = cms.VPSet(
-                  cms.PSet(
-                    retryType = cms.string('RetrySameServerAction'),
-                    allowedTries = cms.untracked.uint32(options.tries)
+                Retry = (
+                  cms.VPSet(
+                    cms.PSet(
+                      retryType = cms.string('RetrySameServerAction'),
+                      allowedTries = cms.untracked.uint32(options.tries)
+                    )
+                  ) if options.retryAction == 'same' else cms.VPSet(
+                    cms.PSet(
+                      retryType = cms.string('RetryActionDiffServer')
+                    )
                   )
                 )
             )
@@ -153,6 +163,8 @@ for im,module in enumerate(options.modules):
             processModule.edgeMax = cms.uint32(15000)
         processModule.brief = cms.bool(options.brief)
     process.p += processModule
+    if options.verbose:
+        print("Retry type:", ('RetrySameServerAction' if options.retryAction == 'same' else 'RetryActionDiffServer'))
     if options.verbose or options.verboseClient:
         keepMsgs.extend([module,module+':TritonClient'])
     if options.testother:

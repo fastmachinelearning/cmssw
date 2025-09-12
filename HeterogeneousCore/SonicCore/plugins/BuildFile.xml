@@ -2,5 +2,5 @@
 <use name="FWCore/PluginManager"/>
 <use name="FWCore/ParameterSet"/>
 <use name="HeterogeneousCore/SonicCore"/>
-<library file="*.cc" name="pluginHeterogeneousCoreSonicCore"/>
+<plugin file="*.cc" name="pluginHeterogeneousCoreSonicCore"/>
 

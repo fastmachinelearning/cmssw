@@ -50,17 +50,22 @@ public:
   void reset() override;
   TritonServerType serverType() const { return serverType_; }
   bool isLocal() const { return isLocal_; }
+  virtual void connectToServer(const std::string& url);
+  virtual void updateServer(std::string serverName);
 
   //for fillDescriptions
   static void fillPSetDescription(edm::ParameterSetDescription& iDesc);
 
 protected:
+  // Protected default constructor for unit testing (no framework services)
+  TritonClient();
+
   //helpers
   bool noOuterDim() const { return noOuterDim_; }
   unsigned outerDim() const { return outerDim_; }
   unsigned nEntries() const;
   void getResults(const std::vector<std::shared_ptr<triton::client::InferResult>>& results);
-  void evaluate() override;
+  virtual void evaluate() override;
   template <typename F>
   bool handle_exception(F&& call);
 

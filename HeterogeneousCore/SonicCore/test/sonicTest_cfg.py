@@ -1,11 +1,13 @@
 import FWCore.ParameterSet.Config as cms
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from FWCore.ParameterSet.VarParsing import VarParsing
+
+options = VarParsing()
+options.register("moduleType","", VarParsing.multiplicity.singleton, VarParsing.varType.string)
+options.parseArguments()
 
 _allowedModuleTypes = ["Producer","Filter"]
-parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-parser.add_argument("--moduleType", type=str, required=True, choices=_allowedModuleTypes, help="Type of module to test")
-options = parser.parse_args()
-
+if options.moduleType not in ["Producer","Filter"]:
+    raise ValueError("Unknown module type: {} (allowed: {})".format(options.moduleType,_allowedModuleTypes))
 _moduleName = "SonicDummy"+options.moduleType
 _moduleClass = getattr(cms,"ED"+options.moduleType)
 
@@ -17,15 +19,19 @@ process.maxEvents.input = 1
 
 process.options.numberOfThreads = 2
 process.options.numberOfStreams = 0
-
 process.dummySync = _moduleClass(_moduleName,
     input = cms.int32(1),
     Client = cms.PSet(
         mode = cms.string("Sync"),
         factor = cms.int32(-1),
         wait = cms.int32(10),
-        allowedTries = cms.untracked.uint32(0),
         fails = cms.uint32(0),
+        Retry = cms.VPSet(
+          cms.PSet(
+            retryType = cms.string('RetrySameServerAction'),
+            allowedTries = cms.untracked.uint32(0)
+          )
+        )
     ),
 )
 
@@ -35,8 +41,14 @@ process.dummyPseudoAsync = _moduleClass(_moduleName,
         mode = cms.string("PseudoAsync"),
         factor = cms.int32(2),
         wait = cms.int32(10),
-        allowedTries = cms.untracked.uint32(0),
         fails = cms.uint32(0),
+        Retry = cms.VPSet(
+          cms.PSet(
+            retryType = cms.string('RetrySameServerAction'),
+            allowedTries = cms.untracked.uint32(0)
+          )
+        )
+
     ),
 )
 
@@ -46,32 +58,53 @@ process.dummyAsync = _moduleClass(_moduleName,
         mode = cms.string("Async"),
         factor = cms.int32(5),
         wait = cms.int32(10),
-        allowedTries = cms.untracked.uint32(0),
         fails = cms.uint32(0),
+        Retry = cms.VPSet(
+          cms.PSet(
+            retryType = cms.string('RetrySameServerAction'),
+            allowedTries = cms.untracked.uint32(0)
+          )
+        )
     ),
 )
 
 process.dummySyncRetry = process.dummySync.clone(
     Client = dict(
         wait = 2,
-        allowedTries = 2,
         fails = 1,
+        Retry = cms.VPSet(
+          cms.PSet(
+            retryType = cms.string('RetrySameServerAction'),
+            allowedTries = cms.untracked.uint32(2)
+          )
+        )
+
     )
 )
 
 process.dummyPseudoAsyncRetry = process.dummyPseudoAsync.clone(
     Client = dict(
         wait = 2,
-        allowedTries = 2,
         fails = 1,
+        Retry = cms.VPSet(
+          cms.PSet(
+            retryType = cms.string('RetrySameServerAction'),
+            allowedTries = cms.untracked.uint32(2)
+          )
+        )
     )
 )
 
 process.dummyAsyncRetry = process.dummyAsync.clone(
     Client = dict(
         wait = 2,
-        allowedTries = 2,
         fails = 1,
+        Retry = cms.VPSet(
+          cms.PSet(
+            allowedTries = cms.untracked.uint32(2),
+            retryType = cms.string('RetrySameServerAction')
+          )
+        )
     )
 )
 

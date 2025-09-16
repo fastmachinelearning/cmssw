@@ -58,16 +58,6 @@ modules = {
 }
 
 defaultClient = applyClientOptions(getDefaultClientPSet().clone(), options)
-keepMsgs = []
-if options.verbose or options.verboseDiscovery:
-    keepMsgs.append('TritonDiscovery')
-if options.verbose or options.verboseClient:
-    keepMsgs.append('TritonClient')
-if options.verbose or options.verboseService:
-    keepMsgs.append('TritonService')
-if options.verbose:
-    # ensure RetryActionDiffServer messages are not suppressed if emitted
-    keepMsgs.append('RetryActionDiffServer')
 
 for im,module in enumerate(options.modules):
     model = options.models[im]
@@ -80,9 +70,6 @@ for im,module in enumerate(options.modules):
                 modelName = cms.string(model),
                 modelVersion = cms.string(""),
                 modelConfigPath = cms.FileInPath("HeterogeneousCore/SonicTriton/data/models/{}/config.pbtxt".format(model)),
-                verbose = cms.untracked.bool(options.verbose or options.verboseClient),
-                useSharedMemory = cms.untracked.bool(not options.noShm),
-                compression = cms.untracked.string(options.compression),
                 Retry = (
                   cms.VPSet(
                     cms.PSet(
@@ -117,10 +104,6 @@ for im,module in enumerate(options.modules):
             processModule.edgeMax = cms.uint32(15000)
         processModule.brief = cms.bool(options.brief)
     process.p += processModule
-    if options.verbose:
-        print("Retry type:", ('RetrySameServerAction' if options.retryAction == 'same' else 'RetryActionDiffServer'))
-    if options.verbose or options.verboseClient:
-        keepMsgs.extend([module,module+':TritonClient'])
     if options.testother:
         # clone modules to test both gRPC and shared memory
         _module2 = module+"GRPC" if processModule.Client.useSharedMemory else "SHM"

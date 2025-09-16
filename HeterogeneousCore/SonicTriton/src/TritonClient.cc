@@ -85,7 +85,7 @@ TritonClient::TritonClient(const edm::ParameterSet& params, const std::string& d
 
   //Connect to server
   updateServer(params.getUntrackedParameter<std::string>("preferredServer"));
-  
+
   //set options
   options_[0].model_version_ = params.getParameter<std::string>("modelVersion");
   options_[0].client_timeout_ = params.getUntrackedParameter<unsigned>("timeout");
@@ -574,24 +574,24 @@ inference::ModelStatistics TritonClient::getServerSideStatus() const {
   return inference::ModelStatistics{};
 }
 
-void TritonClient::updateServer(std::string serverName){
-      //get appropriate server for this model
-      edm::Service<TritonService> ts;
+void TritonClient::updateServer(const std::string& serverName) {
+  //get appropriate server for this model
+  edm::Service<TritonService> ts;
 
-      const auto& server = ts->serverInfo(options_[0].model_name_, serverName);
-      serverType_ = server.type;
-      edm::LogInfo("TritonDiscovery") << debugName_ << " assigned server: " << server.url;
-      //enforce sync mode for fallback CPU server to avoid contention
-      //todo: could enforce async mode otherwise (unless mode was specified by user?)
-      if (serverType_ == TritonServerType::LocalCPU)
-        setMode(SonicMode::Sync);
-      isLocal_ = serverType_ == TritonServerType::LocalCPU or serverType_ == TritonServerType::LocalGPU;
-    
-      //connect to the server
-      TRITON_THROW_IF_ERROR(
-          tc::InferenceServerGrpcClient::Create(&client_, server.url, false, server.useSsl, server.sslOptions),
-          "TritonClient(): unable to create inference context",
-          isLocal_);
+  const auto& server = ts->serverInfo(options_[0].model_name_, serverName);
+  serverType_ = server.type;
+  edm::LogInfo("TritonDiscovery") << debugName_ << " assigned server: " << server.url;
+  //enforce sync mode for fallback CPU server to avoid contention
+  //todo: could enforce async mode otherwise (unless mode was specified by user?)
+  if (serverType_ == TritonServerType::LocalCPU)
+    setMode(SonicMode::Sync);
+  isLocal_ = serverType_ == TritonServerType::LocalCPU or serverType_ == TritonServerType::LocalGPU;
+
+  //connect to the server
+  TRITON_THROW_IF_ERROR(
+      tc::InferenceServerGrpcClient::Create(&client_, server.url, false, server.useSsl, server.sslOptions),
+      "TritonClient(): unable to create inference context",
+      isLocal_);
 }
 
 //for fillDescriptions
@@ -621,16 +621,14 @@ void TritonClient::connectToServer(const std::string& url) {
 
   // Use default SSL options
   triton::client::SslOptions sslOptions;
-  bool useSsl = false; // Assuming no SSL for direct URL connection
+  bool useSsl = false;  // Assuming no SSL for direct URL connection
 
   // Connect to the server
-  TRITON_THROW_IF_ERROR(
-      triton::client::InferenceServerGrpcClient::Create(&client_, url, false, useSsl, sslOptions),
-      "TritonClient::connectToServer(): unable to create inference context",
-      false // isLocal is false
+  TRITON_THROW_IF_ERROR(triton::client::InferenceServerGrpcClient::Create(&client_, url, false, useSsl, sslOptions),
+                        "TritonClient::connectToServer(): unable to create inference context",
+                        false  // isLocal is false
   );
 }
 
 //constructor for testing
 TritonClient::TritonClient() : SonicClient(makeMinimalSonicParamsForTest(), "TritonClient_test", "TritonClient") {}
-

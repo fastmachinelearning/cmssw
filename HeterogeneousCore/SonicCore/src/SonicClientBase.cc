@@ -24,7 +24,8 @@ SonicClientBase::SonicClientBase(const edm::ParameterSet& params,
       //Convert to  RetryActionPtr Type from raw pointer of retryAction
       retryActions_.emplace_back(RetryActionPtr(retryAction.release()));
     } else {
-      throw cms::Exception("Configuration") << "Unknown Retry type " << actionType << " for SonicClient: " << modeName;
+      throw cms::Exception("Configuration")
+          << "Unknown Retry type " << actionType << " for SonicClient: " << fullDebugName_;
     }
   }
 
@@ -58,7 +59,7 @@ void SonicClientBase::start(edm::WaitingTaskWithArenaHolder holder) {
 void SonicClientBase::start() {
   totalTries_ = 0;
   // initialize all actions
-  for (const auto& action : retryActions_) {
+  for (auto& action : retryActions_) {
     action->start();
   }
 }
@@ -77,7 +78,7 @@ void SonicClientBase::finish(bool success, std::exception_ptr eptr) {
     edm::LogInfo("SonicClientBase") << "SonicCallFailed: call failed, no retry actions available after " << totalTries_
                                     << " tries.";
     edm::Exception ex(edm::errors::ExternalFailure);
-    ex << "SonicCallFailed: call failed, no retry actions available after  " << totalTries_ << " tries.";
+    ex << "SonicCallFailed: call failed, no retry actions available after " << totalTries_ << " tries.";
     eptr = make_exception_ptr(ex);
   }
   if (holder_) {

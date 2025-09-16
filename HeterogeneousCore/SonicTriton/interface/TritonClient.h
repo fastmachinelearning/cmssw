@@ -51,7 +51,7 @@ public:
   TritonServerType serverType() const { return serverType_; }
   bool isLocal() const { return isLocal_; }
   virtual void connectToServer(const std::string& url);
-  virtual void updateServer(std::string serverName);
+  virtual void updateServer(const std::string& serverName);
 
   //for fillDescriptions
   static void fillPSetDescription(edm::ParameterSetDescription& iDesc);

@@ -1,7 +1,7 @@
 <test name="TestHeterogeneousCoreSonicTritonProducerCPU" command="unittest.sh ${LOCALTOP} CPU"/>
 <test name="TestHeterogeneousCoreSonicTritonProducerGPU" command="unittest.sh ${LOCALTOP} GPU"/>
-<test name="TestHeterogeneousCoreSonicTritonRetryActionSame" command="cmsRun ${LOCALTOP}/src/HeterogeneousCore/SonicTriton/test/tritonTest_cfg.py --modules TritonGraphProducer --models gat_test --maxEvents 2 --unittest --device cpu --retryAction same"/>
-<test name="TestHeterogeneousCoreSonicTritonRetryActionDiff" command="cmsRun ${LOCALTOP}/src/HeterogeneousCore/SonicTriton/test/tritonTest_cfg.py --modules TritonGraphProducer --models gat_test --maxEvents 2 --unittest --device cpu --retryAction diff"/>
+<test name="TestHeterogeneousCoreSonicTritonRetryActionSame" command="cmsRun ${LOCALTOP}/src/HeterogeneousCore/SonicTriton/test/tritonTest_cfg.py --modules TritonGraphProducer  --maxEvents 2 --unittest --device cpu --retryAction same"/>
+<test name="TestHeterogeneousCoreSonicTritonRetryActionDiff" command="cmsRun ${LOCALTOP}/src/HeterogeneousCore/SonicTriton/test/tritonTest_cfg.py --modules TritonGraphProducer  --maxEvents 2 --unittest --device cpu --retryAction diff"/>
 <test name="TestHeterogeneousCoreSonicTritonVersionCheck" command="cmsTritonConfigTool versioncheck">
   <use name="cmsswdata"/>
 </test>

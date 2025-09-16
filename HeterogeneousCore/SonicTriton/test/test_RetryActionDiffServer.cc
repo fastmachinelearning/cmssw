@@ -17,9 +17,7 @@ public:
 
   void connectToServer(const std::string& url) override { lastConnectedUrl = url; }
 
-  void updateServer(std::string serverName) override {
-    lastUpdatedServerName = std::move(serverName);
-  }
+  void updateServer(const std::string& serverName) override { lastUpdatedServerName = serverName; }
 
   const std::string& lastUrl() const { return lastConnectedUrl; }
   const std::string& lastServerName() const { return lastUpdatedServerName; }
@@ -56,7 +54,8 @@ TEST_CASE("RetryActionDiffServer switches to fallback via updateServer", "[Retry
 class ThrowingTritonClient : public TritonClient {
 public:
   ThrowingTritonClient() : TritonClient() {}
-  void updateServer(std::string) override { throw std::runtime_error("updateServer failure"); }
+  void updateServer(const std::string&) override { throw TritonException("updateServer failure"); }
+
 protected:
   void evaluate() override {}
 };
@@ -70,5 +69,3 @@ TEST_CASE("RetryActionDiffServer catches exceptions from updateServer", "[RetryA
   // Should not throw despite client throwing internally; action disarms afterward
   REQUIRE_NOTHROW(action.retry());
 }
-
-

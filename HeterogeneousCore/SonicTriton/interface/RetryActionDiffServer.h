@@ -16,7 +16,7 @@
  * inference call; after the retry attempt, it disables itself until the next `start()`
  * call.
  */
- 
+
 class RetryActionDiffServer : public RetryActionBase {
 public:
   RetryActionDiffServer(const edm::ParameterSet& conf, SonicClientBase* client);
@@ -24,9 +24,6 @@ public:
 
   void retry() override;
   void start() override;
-
-private:
-}; 
+};
 
 #endif
-

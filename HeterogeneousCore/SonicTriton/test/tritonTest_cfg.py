@@ -70,18 +70,6 @@ for im,module in enumerate(options.modules):
                 modelName = cms.string(model),
                 modelVersion = cms.string(""),
                 modelConfigPath = cms.FileInPath("HeterogeneousCore/SonicTriton/data/models/{}/config.pbtxt".format(model)),
-                Retry = (
-                  cms.VPSet(
-                    cms.PSet(
-                      retryType = cms.string('RetrySameServerAction'),
-                      allowedTries = cms.untracked.uint32(options.tries)
-                    )
-                  ) if options.retryAction == 'same' else cms.VPSet(
-                    cms.PSet(
-                      retryType = cms.string('RetryActionDiffServer')
-                    )
-                  )
-                )
             )
         )
     )

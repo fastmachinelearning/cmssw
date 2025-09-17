@@ -21,13 +21,6 @@ parser.add_argument("--mode", default="Async", type=str, choices=allowed_modes, 
 parser.add_argument("--brief", default=False, action="store_true", help="briefer output for graph modules")
 parser.add_argument("--unittest", default=False, action="store_true", help="unit test mode: reduce input sizes")
 parser.add_argument("--testother", default=False, action="store_true", help="also test gRPC communication if shared memory enabled, or vice versa")
-parser.add_argument("--noShm", default=False, action="store_true", help="disable shared memory")
-parser.add_argument("--compression", default="", type=str, choices=allowed_compression, help="enable I/O compression")
-parser.add_argument("--ssl", default=False, action="store_true", help="enable SSL authentication for server communication")
-parser.add_argument("--device", default="auto", type=str.lower, choices=allowed_devices, help="specify device for fallback server")
-parser.add_argument("--container", default="apptainer", type=str.lower, choices=allowed_containers, help="specify container for fallback server")
-parser.add_argument("--tries", default=0, type=int, help="number of retries for failed request")
-parser.add_argument("--retryAction", default="same", type=str, choices=["same","diff"], help="retry policy: same server or different server")
 options = parser.parse_args()
 
 options = getOptions(parser, verbose=True)

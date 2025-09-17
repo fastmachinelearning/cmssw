@@ -35,6 +35,7 @@ def getParser():
     parser.add_argument("--fallbackName", default="", type=str, help="name for fallback server")
     parser.add_argument("--imageName", default="", type=str, help="container image name for fallback server")
     parser.add_argument("--tempDir", default="", type=str, help="temp directory for fallback server")
+    parser.add_argument("--retryAction", default="same", type=str, choices=["same","diff"], help="retry policy: same server or different server")
 
     return parser
 

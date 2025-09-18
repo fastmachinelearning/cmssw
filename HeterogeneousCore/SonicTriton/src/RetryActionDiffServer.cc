@@ -20,14 +20,24 @@ void RetryActionDiffServer::retry() {
     auto* tritonClient = static_cast<TritonClient*>(client_);
     edm::LogInfo("RetryActionDiffServer") << "Attempting retry by switching to fallback server";
     // TODO: Get the server name from TritonService, use fallback for testing
-    tritonClient->updateServer(TritonService::Server::fallbackName);
-    eval();
+    edm::Service<TritonService> ts;
+
+    // get best server, ignoring the current server
+    auto bestServerName = ts->getBestServer(tritonClient->modelName(),tritonClient->serverName());
+
+    if (bestServerName) {
+      tritonClient->updateServer(*bestServerName);
+      eval();
+    } else {
+      edm::LogWarning("RetryActionDiffServer") 
+          << "No alternative server found for model " << tritonClient->modelName();
+    }
   } catch (TritonException& e) {
     e.convertToWarning();
   } catch (std::exception& e) {
     edm::LogError("RetryActionDiffServer") << "Failed to retry with alternative server: " << e.what();
   } catch (...) {
-    edm::LogError("RetryActionDiffServe: rUnknownFailure") << "An unknown exception was thrown";
+    edm::LogError("RetryActionDiffServer: UnknownFailure") << "An unknown exception was thrown";
   }
   this->shouldRetry_ = false;
 }

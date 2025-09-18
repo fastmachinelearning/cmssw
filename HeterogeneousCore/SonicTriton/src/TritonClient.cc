@@ -578,7 +578,13 @@ void TritonClient::updateServer(const std::string& serverName) {
   //get appropriate server for this model
   edm::Service<TritonService> ts;
 
-  const auto& server = ts->serverInfo(options_[0].model_name_, serverName);
+  const auto& serverMap = ts->serverInfo(options_[0].model_name_, serverName);
+
+  const auto& server = serverMap.second;
+
+  //update server name
+  serverName_ = serverMap.first; 
+
   serverType_ = server.type;
   edm::LogInfo("TritonDiscovery") << debugName_ << " assigned server: " << server.url;
   //enforce sync mode for fallback CPU server to avoid contention

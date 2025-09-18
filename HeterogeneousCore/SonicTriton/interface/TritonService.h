@@ -123,14 +123,14 @@ public:
 
   //accessors
   void addModel(const std::string& modelName, const std::string& path);
-  // Change to getServer?
-  Server serverInfo(const std::string& model, const std::string& preferred = "") const;
+
+  const std::pair<const std::string, TritonService::Server>& serverInfo(const std::string& model, const std::string& preferred = "") const;
 
   // update health stats of all servers
   void updateServerHealth(const std::string& modelName = "");
 
   // return the best server for retry, ignore the current server
-  std::optional<Server> getBestServer(const std::string& modelName, const std::string& IgnoreServer = "");
+  std::optional<std::string> getBestServer(const std::string& modelName, const std::string& IgnoreServer = "");
 
   // helper functions to get server statistics?
   //  - getServerSideStatus()

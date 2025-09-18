@@ -226,7 +226,7 @@ void TritonService::preModuleDestruction(edm::ModuleDescription const& desc) {
 }
 
 //second return value is only true if fallback CPU server is being used
-TritonService::Server TritonService::serverInfo(const std::string& model, const std::string& preferred) const {
+const std::pair<const std::string, TritonService::Server>& TritonService::serverInfo(const std::string& model, const std::string& preferred) const {
   auto mit = models_.find(model);
   if (mit == models_.end())
     throw cms::Exception("MissingModel") << "TritonService: There are no servers that provide model " << model;
@@ -244,8 +244,8 @@ TritonService::Server TritonService::serverInfo(const std::string& model, const 
   const auto& serverName(msit == modelServers.end() ? *modelServers.begin() : preferred);
 
   //todo: use some algorithm to select server rather than just picking arbitrarily
-  const auto& server(servers_.find(serverName)->second);
-  return server;
+  const auto serverPair = servers_.find(serverName);
+  return *serverPair;
 }
 
 void TritonService::updateServerHealth(const std::string& modelName) {
@@ -316,9 +316,9 @@ void TritonService::updateServerHealth(const std::string& modelName) {
   }
 }
 
-std::optional<TritonService::Server> TritonService::getBestServer(const std::string& modelName,
+std::optional<std::string> TritonService::getBestServer(const std::string& modelName,
                                                                   const std::string& IgnoreServer) {
-  std::optional<Server> bestServer;
+  std::optional<std::string> bestServerName;
   ServerHealth bestHealth;
 
   // get fresh ServerHealth statistics
@@ -342,18 +342,18 @@ std::optional<TritonService::Server> TritonService::getBestServer(const std::str
     // Select server according to rules:
     // 1) lowest failureCount
     // 2) tie-breaker: lowest avgQueueTimeMs
-    if (!bestServer || health.failureCount < bestHealth.failureCount ||
+    if (!bestServerName || health.failureCount < bestHealth.failureCount ||
         (health.failureCount == bestHealth.failureCount && health.avgQueueTimeMs < bestHealth.avgQueueTimeMs)) {
-      bestServer = server;
+      bestServerName   = serverName;
       bestHealth = health;
     }
   }
-  if (verbose_ && bestServer) {
-    edm::LogInfo("Chosen server for model '" + modelName + "': " + bestServer->url +
+  if (verbose_ && bestServerName) {
+    edm::LogInfo("Chosen server for model '" + modelName + "': " + *bestServerName +
                  " (failures=" + std::to_string(bestHealth.failureCount) +
                  ", avgQueueTime=" + std::to_string(bestHealth.avgQueueTimeMs) + " ms)");
   }
-  return bestServer;
+  return bestServerName;
 }
 
 void TritonService::preBeginJob(edm::ProcessContext const&) {

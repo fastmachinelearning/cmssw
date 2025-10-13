@@ -54,8 +54,14 @@ public:
           << "Single unload: " << (unloadResult ? "success" : "failed");
     }
     
-    // Fill dummy input for base class
-    iInput = std::make_shared<TritonInput<float>>();
+    // Fill dummy input - use actual input from the model (gat_test expects "x" input)
+    // This is just to satisfy the base class requirements, not for actual inference
+    auto& input_x = iInput.at("x");
+    auto data_x = input_x.allocate<float>();
+    // Minimal dummy data
+    (*data_x)[0] = std::vector<float>{1.0f};
+    input_x.setShape(0, 1, 0);
+    input_x.toServer(data_x);
   }
 
   void produce(edm::Event& iEvent, edm::EventSetup const& iSetup, Output const& iOutput) override {
@@ -65,7 +71,7 @@ public:
 
   static void fillDescriptions(edm::ConfigurationDescriptions& descriptions) {
     edm::ParameterSetDescription desc;
-    TritonEDProducer<>::fillPSetDescription(desc);
+    TritonClient::fillPSetDescription(desc);
     desc.add<std::string>("testModelName", "test_model");
     desc.add<std::string>("testModelPath", "/path/to/test_model");
     desc.add<int>("loadUnloadCycles", 1);

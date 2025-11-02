@@ -568,46 +568,51 @@ void TritonService::fillDescriptions(edm::ConfigurationDescriptions& description
 bool TritonService::loadModel(const std::string& modelName, const std::string& path) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
-  bool isModelLoaded = loadedModels_.count(modelName);
-  if (isModelLoaded) {
-    modelRefCount_[modelName]++;
+  // Check if model is already loaded (ref count > 0)
+  auto refIt = modelRefCount_.find(modelName);
+  if (refIt != modelRefCount_.end() && refIt->second > 0) {
+    refIt->second++;
     if (verbose_)
-      edm::LogInfo("TritonService") << "Model " << modelName
-                                    << " already loaded, ref count: " << modelRefCount_[modelName];
+      edm::LogInfo("TritonService") << "Model " << modelName << " already loaded, ref count: " << refIt->second;
     return true;
   }
 
-  // Find which server can host this model
-  auto mit = models_.find(modelName);
-  bool isNoServerAvailable = (mit == models_.end() || mit->second.servers.empty());
-  if (isNoServerAvailable) {
-    edm::LogWarning("TritonService") << "loadModel: No server available for model " << modelName;
+  // Dynamic loading is only supported for the fallback server
+  auto sit = servers_.find(Server::fallbackName);
+  if (sit == servers_.end()) {
+    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << modelName << " on server "
+                                     << Server::fallbackName << ": server not found";
     return false;
   }
 
-  const std::string& serverName = *mit->second.servers.begin();
-  auto sit = servers_.find(serverName);
-  if (sit == servers_.end()) {
-    edm::LogWarning("TritonService") << "loadModel: Server " << serverName << " not found";
+  // Verify that the fallback server is actually running
+  if (!startedFallback_) {
+    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << modelName << " on server "
+                                     << Server::fallbackName << ": server not started";
     return false;
-  }  // Gets first available server
+  }
 
   std::unique_ptr<tc::InferenceServerGrpcClient> client;
   TRITON_THROW_IF_ERROR(tc::InferenceServerGrpcClient::Create(
                             &client, sit->second.url, false, sit->second.useSsl, sit->second.sslOptions),
-                        "loadModel: unable to create client for server " + serverName,
+                        "loadModel: unable to create client for fallback server",
                         false);
 
   // Actually load the model on the server
   auto err = client->LoadModel(modelName);
-  TRITON_THROW_IF_ERROR(err, "loadModel: failed to load model " + modelName + " on server " + serverName, false);
+  TRITON_THROW_IF_ERROR(err, "loadModel: failed to load model " + modelName + " on fallback server", false);
 
-  loadedModels_.insert(modelName);
+  // Update tracking
   modelRefCount_[modelName] = 1;
-  models_[modelName].path = path;
+
+  // Add model to unservedModels_ if not already tracked
+  auto umit = unservedModels_.find(modelName);
+  if (umit == unservedModels_.end()) {
+    unservedModels_.emplace(modelName, path);
+  }
 
   if (verbose_)
-    edm::LogInfo("TritonService") << "Successfully loaded model " << modelName << " on server " << serverName;
+    edm::LogInfo("TritonService") << "Successfully loaded model " << modelName << " on fallback server";
 
   return true;
 }
@@ -615,51 +620,31 @@ bool TritonService::loadModel(const std::string& modelName, const std::string& p
 bool TritonService::unloadModel(const std::string& modelName) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
-  bool isModelLoaded = loadedModels_.count(modelName);
-  if (!isModelLoaded) {
+  // Check if model is loaded (exists in refcount map)
+  auto refIt = modelRefCount_.find(modelName);
+  if (refIt == modelRefCount_.end() || refIt->second == 0) {
     edm::LogWarning("TritonService") << "unloadModel: Model " << modelName << " is not loaded";
     return false;
   }
 
   // Decrement reference count and check if still in use
-  modelRefCount_[modelName]--;
-  bool isStillReferenced = (modelRefCount_[modelName] > 0);
-  if (isStillReferenced) {
+  refIt->second--;
+  if (refIt->second > 0) {
     if (verbose_)
-      edm::LogInfo("TritonService") << "Model " << modelName
-                                    << " still in use, ref count: " << modelRefCount_[modelName];
+      edm::LogInfo("TritonService") << "Model " << modelName << " still in use, ref count: " << refIt->second;
     return true;
   }
 
-  // Reference count reached 0, determine which server hosts this model
-  auto mit = models_.find(modelName);
-  if (mit == models_.end() || mit->second.servers.empty()) {
-    edm::LogWarning("TritonService") << "unloadModel: No server information for model " << modelName;
-    return false;
-  }
-
-  const std::string& serverName = *mit->second.servers.begin();
-
-  bool isFallbackServer = (serverName == Server::fallbackName);
-  if (!isFallbackServer) {
-    if (verbose_)
-      edm::LogInfo("TritonService") << "Model " << modelName << " is on shared server " << serverName
-                                    << ", not unloading (other jobs may be using it)";
-
-    loadedModels_.erase(modelName);
-    modelRefCount_.erase(modelName);
-    return true;
-  }
-
-  if (verbose_)
-    edm::LogInfo("TritonService") << "Model " << modelName << " is on fallback server, proceeding to unload";
-
-  auto sit = servers_.find(serverName);
-  bool isNotSafeToUnload = (sit == servers_.end());
-  if (isNotSafeToUnload) {
+  // Reference count reached 0, unload from fallback server only
+  // (dynamic unloading is only supported for fallback server)
+  auto sit = servers_.find(Server::fallbackName);
+  if (sit == servers_.end()) {
     edm::LogWarning("TritonService") << "unloadModel: Fallback server not found";
     return false;
   }
+
+  if (verbose_)
+    edm::LogInfo("TritonService") << "Model " << modelName << " ref count is 0, unloading from fallback server";
 
   std::unique_ptr<tc::InferenceServerGrpcClient> client;
   TRITON_THROW_IF_ERROR(tc::InferenceServerGrpcClient::Create(
@@ -670,8 +655,8 @@ bool TritonService::unloadModel(const std::string& modelName) {
   auto err = client->UnloadModel(modelName);
   TRITON_THROW_IF_ERROR(err, "unloadModel: failed to unload model " + modelName + " from fallback server", false);
 
-  loadedModels_.erase(modelName);
-  modelRefCount_.erase(modelName);
+  // Remove from tracking
+  modelRefCount_.erase(refIt);
 
   if (verbose_)
     edm::LogInfo("TritonService") << "Successfully unloaded model " << modelName << " from fallback server";

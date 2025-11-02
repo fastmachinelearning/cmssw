@@ -25,35 +25,33 @@ public:
 
   void acquire(edm::Event const& iEvent, edm::EventSetup const& iSetup, Input& iInput) override {
     edm::Service<TritonService> ts;
-    
+
     // Test dynamic loading and unloading
     if (testConcurrency_) {
       // Stress test with multiple rapid load/unload cycles
       for (int i = 0; i < loadUnloadCycles_; ++i) {
         bool loadResult = ts->loadModel(testModelName_, testModelPath_);
-        edm::LogInfo("DynamicModelLoadingProducer") 
+        edm::LogInfo("DynamicModelLoadingProducer")
             << "Load attempt " << i << ": " << (loadResult ? "success" : "failed");
-        
+
         // Small delay to allow other threads to interleave
         if (i % 5 == 0) {
           std::this_thread::yield();
         }
-        
+
         bool unloadResult = ts->unloadModel(testModelName_);
-        edm::LogInfo("DynamicModelLoadingProducer") 
+        edm::LogInfo("DynamicModelLoadingProducer")
             << "Unload attempt " << i << ": " << (unloadResult ? "success" : "failed");
       }
     } else {
       // Simple test: load once, unload once
       bool loadResult = ts->loadModel(testModelName_, testModelPath_);
-      edm::LogInfo("DynamicModelLoadingProducer") 
-          << "Single load: " << (loadResult ? "success" : "failed");
-      
+      edm::LogInfo("DynamicModelLoadingProducer") << "Single load: " << (loadResult ? "success" : "failed");
+
       bool unloadResult = ts->unloadModel(testModelName_);
-      edm::LogInfo("DynamicModelLoadingProducer") 
-          << "Single unload: " << (unloadResult ? "success" : "failed");
+      edm::LogInfo("DynamicModelLoadingProducer") << "Single unload: " << (unloadResult ? "success" : "failed");
     }
-    
+
     // Fill dummy input - use actual input from the model (gat_test expects "x" input)
     // This is just to satisfy the base class requirements, not for actual inference
     auto& input_x = iInput.at("x");
@@ -88,4 +86,3 @@ private:
 };
 
 DEFINE_FWK_MODULE(DynamicModelLoadingProducer);
-

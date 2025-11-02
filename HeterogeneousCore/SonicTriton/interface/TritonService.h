@@ -45,8 +45,7 @@ public:
           instanceName(pset.getUntrackedParameter<std::string>("instanceName")),
           tempDir(pset.getUntrackedParameter<std::string>("tempDir")),
           imageName(pset.getUntrackedParameter<std::string>("imageName")),
-          sandboxName(pset.getUntrackedParameter<std::string>("sandboxName")) 
-    {
+          sandboxName(pset.getUntrackedParameter<std::string>("sandboxName")) {
       //randomize instance name
       if (instanceName.empty()) {
         instanceName =
@@ -123,7 +122,8 @@ public:
 
   //accessors
   void addModel(const std::string& modelName, const std::string& path);
-  const std::pair<const std::string, TritonService::Server>& serverInfo(const std::string& model, const std::string& preferred = "") const;
+  const std::pair<const std::string, TritonService::Server>& serverInfo(const std::string& model,
+                                                                        const std::string& preferred = "") const;
 
   // update health stats of all servers
   void updateServerHealth(const std::string& modelName = "");
@@ -143,7 +143,7 @@ public:
   void notifyCallStatus(bool status) const;
 
   static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
-  
+
   bool loadModel(const std::string& modelName, const std::string& path);
   bool unloadModel(const std::string& modelName);
 
@@ -174,7 +174,7 @@ private:
   std::unordered_map<std::string, Model> models_;
   std::unordered_map<unsigned, Module> modules_;
   int numberOfThreads_;
-  
+
   //Dynamic model loading and unloading
   std::unordered_map<std::string, int> modelRefCount_;
   std::unordered_set<std::string> loadedModels_;

@@ -23,14 +23,13 @@ void RetryActionDiffServer::retry() {
     edm::Service<TritonService> ts;
 
     // get best server, ignoring the current server
-    auto bestServerName = ts->getBestServer(tritonClient->modelName(),tritonClient->serverName());
+    auto bestServerName = ts->getBestServer(tritonClient->modelName(), tritonClient->serverName());
 
     if (bestServerName) {
       tritonClient->updateServer(*bestServerName);
       eval();
     } else {
-      edm::LogWarning("RetryActionDiffServer") 
-          << "No alternative server found for model " << tritonClient->modelName();
+      edm::LogWarning("RetryActionDiffServer") << "No alternative server found for model " << tritonClient->modelName();
     }
   } catch (TritonException& e) {
     e.convertToWarning();

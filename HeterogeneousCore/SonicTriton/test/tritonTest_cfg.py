@@ -89,6 +89,8 @@ for im,module in enumerate(options.modules):
         processModule.brief = cms.bool(options.brief)
     elif module=="DynamicModelLoadingProducer":
         # Configure dynamic model loading test
+        # NOTE: This test requires the fallback server to be started with explicit model control mode
+        # (--model-control-mode explicit flag), otherwise dynamic loading will fail
         processModule.testModelName = cms.string(model)
         processModule.testModelPath = cms.string("HeterogeneousCore/SonicTriton/data/models/{}".format(model))
         processModule.loadUnloadCycles = cms.int32(options.loadUnloadCycles)

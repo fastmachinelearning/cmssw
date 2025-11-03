@@ -194,33 +194,25 @@ void TritonService::addModel(const std::string& modelName, const std::string& pa
   if (!allowAddModel_)
     throw cms::Exception("DisallowedAddModel")
         << "TritonService: Attempt to call addModel() outside of module constructors";
-  //if model is not in the list, then no specified server provides it
-  auto mit = models_.find(modelName);
-  if (mit == models_.end()) {
-    auto& modelInfo(unservedModels_.emplace(modelName, path).first->second);
-    modelInfo.modules.insert(currentModuleId_);
-    //only keep track of modules that need unserved models
-    modules_.emplace(currentModuleId_, modelName);
-  }
+  // Ensure model exists in declared models; preserve non-empty path if provided
+  auto& modelInfo(models_.emplace(modelName, path).first->second);
+  if (modelInfo.path.empty() && !path.empty()) modelInfo.path = path;
+  // Track the module using this model
+  modelInfo.modules.insert(currentModuleId_);
+  modules_.emplace(currentModuleId_, modelName);
 }
 
 void TritonService::postModuleConstruction(edm::ModuleDescription const& desc) { allowAddModel_ = false; }
 
 void TritonService::preModuleDestruction(edm::ModuleDescription const& desc) {
-  //remove destructed modules from unserved list
-  if (unservedModels_.empty())
-    return;
   auto id = desc.id();
   auto oit = modules_.find(id);
   if (oit != modules_.end()) {
     const auto& moduleInfo(oit->second);
-    auto mit = unservedModels_.find(moduleInfo.model);
-    if (mit != unservedModels_.end()) {
+    auto mit = models_.find(moduleInfo.model);
+    if (mit != models_.end()) {
       auto& modelInfo(mit->second);
       modelInfo.modules.erase(id);
-      //remove a model if it is no longer needed by any modules
-      if (modelInfo.modules.empty())
-        unservedModels_.erase(mit);
     }
     modules_.erase(oit);
   }
@@ -359,7 +351,7 @@ std::optional<std::string> TritonService::getBestServer(const std::string& model
 
 void TritonService::preBeginJob(edm::ProcessContext const&) {
   //only need fallback if there are unserved models
-  if (!fallbackOpts_.enable or unservedModels_.empty())
+  if (!fallbackOpts_.enable)
     return;
 
   //include fallback server in set
@@ -373,10 +365,12 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
   std::string msg;
   if (verbose_)
     msg = "List of models for fallback server: ";
-  //all unserved models are provided by fallback server
+  // Provide all declared models with known paths via the fallback server
   auto& server(servers_.find(Server::fallbackName)->second);
-  for (const auto& [modelName, model] : unservedModels_) {
-    auto& modelInfo(models_.emplace(modelName, model).first->second);
+  for (const auto& [modelName, model] : models_) {
+    // Only seed models for which we have a repository path
+    if (model.path.empty()) continue;
+    auto& modelInfo(models_.find(modelName)->second);
     modelInfo.servers.insert(Server::fallbackName);
     server.models.insert(modelName);
     if (verbose_)
@@ -401,7 +395,8 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
     fallbackOpts_.command += " -w " + std::to_string(fallbackOpts_.wait);
   // Explicit model control mode is required for dynamic loading
   fallbackOpts_.command += " --model-control-mode explicit";
-  for (const auto& [modelName, model] : unservedModels_) {
+  for (const auto& [modelName, model] : models_) {
+    if (model.path.empty()) continue;
     fallbackOpts_.command += " -m " + model.path;
   }
   std::string thread_string = " -I " + std::to_string(numberOfThreads_);
@@ -410,8 +405,7 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
     fallbackOpts_.command += " -i " + fallbackOpts_.imageName;
   if (!fallbackOpts_.sandboxName.empty())
     fallbackOpts_.command += " -s " + fallbackOpts_.sandboxName;
-  //don't need this anymore
-  unservedModels_.clear();
+  // models_ remains for runtime queries; nothing to clear here
 
   //get a random temporary directory if none specified
   if (fallbackOpts_.tempDir.empty()) {
@@ -591,15 +585,13 @@ bool TritonService::loadModel(FallbackModelState& state) {
 
   auto sit = servers_.find(Server::fallbackName);
   if (sit == servers_.end()) {
-    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << state.modelName << " on server "
-                                     << Server::fallbackName << ": server not found";
-    return false;
+    throw cms::Exception("TritonService")
+        << "loadModel: fallback server not found for model '" << state.modelName << "'";
   }
 
   if (!startedFallback_) {
-    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << state.modelName << " on server "
-                                     << Server::fallbackName << ": server not started";
-    return false;
+    throw cms::Exception("TritonService")
+        << "loadModel: fallback server not started; cannot load model '" << state.modelName << "'";
   }
 
   std::unique_ptr<tc::InferenceServerGrpcClient> client;

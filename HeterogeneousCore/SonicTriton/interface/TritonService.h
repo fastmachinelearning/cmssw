@@ -179,7 +179,6 @@ private:
   bool startedFallback_;
   mutable std::atomic<int> callFails_;
   std::string pid_;
-  std::unordered_map<std::string, Model> unservedModels_;
   //this represents a many:many:many map
   std::unordered_map<std::string, Server> servers_;
   //server health needs concurrent-safe edits

@@ -16,7 +16,7 @@ models = {
 allowed_modes = ["Async","PseudoAsync","Sync"]
 
 parser = getParser()
-parser.add_argument("--modules", metavar=("MODULES"), default=["TritonGraphProducer"], nargs='+', type=str, choices=list(models), help="list of modules to run (choices: %(choices)s)")
+parser.add_argument("--modules", metavar=("MODULES"), default=["DynamicModelLoadingProducer"], nargs='+', type=str, choices=list(models), help="list of modules to run (choices: %(choices)s)")
 parser.add_argument("--models", default=["gat_test"], nargs='+', type=str, help="list of models (same length as modules, or just 1 entry if all modules use same model)")
 parser.add_argument("--mode", default="Async", type=str, choices=allowed_modes, help="mode for client")
 parser.add_argument("--brief", default=False, action="store_true", help="briefer output for graph modules")

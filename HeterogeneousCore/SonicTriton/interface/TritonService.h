@@ -110,6 +110,13 @@ public:
     std::unordered_set<std::string> servers;
     std::unordered_set<unsigned> modules;
   };
+  // Tracks fallback dynamic model state (refcount and path)
+  struct FallbackModelState {
+    std::string modelName;  // canonical model id for Triton calls
+    std::string path;       // model repository path for fallback server
+    int refCount{0};
+    bool isLoaded() const { return refCount > 0; }
+  };
   struct Module {
     //currently assumes that a module can only have one associated model
     Module(const std::string& model_) : model(model_) {}
@@ -161,6 +168,9 @@ private:
   //helper
   template <typename LOG>
   void printFallbackServerLog() const;
+  // Internal helpers that operate on FallbackModelState directly (caller holds lock)
+  bool loadModel(FallbackModelState& state);
+  bool unloadModel(FallbackModelState& state);
 
   bool verbose_;
   FallbackOpts fallbackOpts_;
@@ -181,6 +191,8 @@ private:
   //Dynamic model loading and unloading (fallback server only)
   std::unordered_map<std::string, int> modelRefCount_;
   std::mutex modelLoadMutex_;
+  // Fallback dynamic model states, keyed by model name
+  std::unordered_map<std::string, FallbackModelState> fallbackModels_;
 };
 
 #endif

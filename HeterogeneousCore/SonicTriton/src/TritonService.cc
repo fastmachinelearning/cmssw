@@ -570,23 +570,34 @@ void TritonService::fillDescriptions(edm::ConfigurationDescriptions& description
 bool TritonService::loadModel(const std::string& modelName, const std::string& path) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
-  auto refIt = modelRefCount_.find(modelName);
-  if (refIt != modelRefCount_.end() && refIt->second > 0) {
-    refIt->second++;
+  // Resolve state and canonicalize fields
+  auto& state = fallbackModels_[modelName];
+  if (state.modelName.empty()) state.modelName = modelName;
+  if (state.path.empty() && !path.empty()) state.path = path;
+
+  return loadModel(state);
+}
+
+bool TritonService::loadModel(FallbackModelState& state) {
+  // if already loaded, bump refcount
+  if (state.refCount > 0) {
+    ++state.refCount;
+    modelRefCount_[state.modelName] = state.refCount;
     if (verbose_)
-      edm::LogInfo("TritonService") << "Model " << modelName << " already loaded, ref count: " << refIt->second;
+      edm::LogInfo("TritonService") << "Model " << state.modelName << " already loaded, ref count: "
+                                     << state.refCount;
     return true;
   }
 
   auto sit = servers_.find(Server::fallbackName);
   if (sit == servers_.end()) {
-    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << modelName << " on server "
+    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << state.modelName << " on server "
                                      << Server::fallbackName << ": server not found";
     return false;
   }
 
   if (!startedFallback_) {
-    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << modelName << " on server "
+    edm::LogWarning("TritonService") << "loadModel: Failed to load model " << state.modelName << " on server "
                                      << Server::fallbackName << ": server not started";
     return false;
   }
@@ -597,35 +608,48 @@ bool TritonService::loadModel(const std::string& modelName, const std::string& p
                         "loadModel: unable to create client for fallback server",
                         false);
 
-  auto err = client->LoadModel(modelName);
-  TRITON_THROW_IF_ERROR(err, "loadModel: failed to load model " + modelName + " on fallback server", false);
+  auto err = client->LoadModel(state.modelName);
+  TRITON_THROW_IF_ERROR(err, "loadModel: failed to load model " + state.modelName + " on fallback server", false);
 
-  modelRefCount_[modelName] = 1;
+  // Update state and tracking
+  state.refCount = 1;
+  modelRefCount_[state.modelName] = state.refCount;
 
   // Track dynamically loaded model in service maps
-  auto& modelInfo(models_.emplace(modelName, path).first->second);
+  auto& modelInfo(models_.emplace(state.modelName, state.path).first->second);
   modelInfo.servers.insert(Server::fallbackName);
-  sit->second.models.insert(modelName);
+  sit->second.models.insert(state.modelName);
 
   if (verbose_)
-    edm::LogInfo("TritonService") << "Successfully loaded model " << modelName << " on fallback server";
+    edm::LogInfo("TritonService") << "Successfully loaded model " << state.modelName << " on fallback server";
   return true;
 }
 
 bool TritonService::unloadModel(const std::string& modelName) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
-  // Check if model is loaded (exists in refcount map)
-  auto refIt = modelRefCount_.find(modelName);
-  if (refIt == modelRefCount_.end() || refIt->second == 0) {
+  auto it = fallbackModels_.find(modelName);
+  if (it == fallbackModels_.end()) {
     edm::LogWarning("TritonService") << "unloadModel: Model " << modelName << " is not loaded";
     return false;
   }
+  // Ensure struct has canonical name
+  if (it->second.modelName.empty()) it->second.modelName = modelName;
+  return unloadModel(it->second);
+}
 
-  refIt->second--;
-  if (refIt->second > 0) {
+bool TritonService::unloadModel(FallbackModelState& state) {
+  if (state.refCount == 0) {
+    edm::LogWarning("TritonService") << "unloadModel: Model " << state.modelName << " is not loaded";
+    return false;
+  }
+
+  if (state.refCount > 1) {
+    --(state.refCount);
+    modelRefCount_[state.modelName] = state.refCount;
     if (verbose_)
-      edm::LogInfo("TritonService") << "Model " << modelName << " still in use, ref count: " << refIt->second;
+      edm::LogInfo("TritonService") << "Model " << state.modelName << " still in use, ref count: "
+                                     << state.refCount;
     return true;
   }
 
@@ -636,7 +660,7 @@ bool TritonService::unloadModel(const std::string& modelName) {
   }
 
   if (verbose_)
-    edm::LogInfo("TritonService") << "Model " << modelName << " ref count is 0, unloading from fallback server";
+    edm::LogInfo("TritonService") << "Model " << state.modelName << " ref count is 1, unloading from fallback server";
 
   std::unique_ptr<tc::InferenceServerGrpcClient> client;
   TRITON_THROW_IF_ERROR(tc::InferenceServerGrpcClient::Create(
@@ -644,12 +668,21 @@ bool TritonService::unloadModel(const std::string& modelName) {
                         "unloadModel: unable to create client for fallback server",
                         false);
 
-  auto err = client->UnloadModel(modelName);
-  TRITON_THROW_IF_ERROR(err, "unloadModel: failed to unload model " + modelName + " from fallback server", false);
+  auto err = client->UnloadModel(state.modelName);
+  TRITON_THROW_IF_ERROR(err, "unloadModel: failed to unload model " + state.modelName + " from fallback server",
+                        false);
 
-  modelRefCount_.erase(refIt);
+  modelRefCount_.erase(state.modelName);
+  state.refCount = 0;
+
+  // Update dynamic tracking: remove fallback association
+  auto mit = models_.find(state.modelName);
+  if (mit != models_.end()) {
+    mit->second.servers.erase(Server::fallbackName);
+  }
+  sit->second.models.erase(state.modelName);
 
   if (verbose_)
-    edm::LogInfo("TritonService") << "Successfully unloaded model " << modelName << " from fallback server";
+    edm::LogInfo("TritonService") << "Successfully unloaded model " << state.modelName << " from fallback server";
   return true;
 }

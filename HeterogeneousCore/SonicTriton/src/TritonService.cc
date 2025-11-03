@@ -350,9 +350,9 @@ std::optional<std::string> TritonService::getBestServer(const std::string& model
     }
   }
   if (verbose_ && bestServerName) {
-    edm::LogInfo("Chosen server for model '" + modelName + "': " + *bestServerName +
-                 " (failures=" + std::to_string(bestHealth.failureCount) +
-                 ", avgQueueTime=" + std::to_string(bestHealth.avgQueueTimeMs) + " ms)");
+    edm::LogInfo("TritonDiscovery") << "Chosen server for model '" << modelName << "': " << *bestServerName
+                                     << " (failures=" << bestHealth.failureCount
+                                     << ", avgQueueTime=" << bestHealth.avgQueueTimeMs << " ms)";
   }
   return bestServerName;
 }
@@ -399,6 +399,8 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
     fallbackOpts_.command += " -r " + std::to_string(fallbackOpts_.retries);
   if (fallbackOpts_.wait >= 0)
     fallbackOpts_.command += " -w " + std::to_string(fallbackOpts_.wait);
+  // Explicit model control mode is required for dynamic loading
+  fallbackOpts_.command += " --model-control-mode explicit";
   for (const auto& [modelName, model] : unservedModels_) {
     fallbackOpts_.command += " -m " + model.path;
   }
@@ -568,7 +570,6 @@ void TritonService::fillDescriptions(edm::ConfigurationDescriptions& description
 bool TritonService::loadModel(const std::string& modelName, const std::string& path) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
-  // Check if model is already loaded (ref count > 0)
   auto refIt = modelRefCount_.find(modelName);
   if (refIt != modelRefCount_.end() && refIt->second > 0) {
     refIt->second++;
@@ -577,7 +578,6 @@ bool TritonService::loadModel(const std::string& modelName, const std::string& p
     return true;
   }
 
-  // Dynamic loading is only supported for the fallback server
   auto sit = servers_.find(Server::fallbackName);
   if (sit == servers_.end()) {
     edm::LogWarning("TritonService") << "loadModel: Failed to load model " << modelName << " on server "
@@ -585,7 +585,6 @@ bool TritonService::loadModel(const std::string& modelName, const std::string& p
     return false;
   }
 
-  // Verify that the fallback server is actually running
   if (!startedFallback_) {
     edm::LogWarning("TritonService") << "loadModel: Failed to load model " << modelName << " on server "
                                      << Server::fallbackName << ": server not started";
@@ -598,22 +597,18 @@ bool TritonService::loadModel(const std::string& modelName, const std::string& p
                         "loadModel: unable to create client for fallback server",
                         false);
 
-  // Actually load the model on the server
   auto err = client->LoadModel(modelName);
   TRITON_THROW_IF_ERROR(err, "loadModel: failed to load model " + modelName + " on fallback server", false);
 
-  // Update tracking
   modelRefCount_[modelName] = 1;
 
-  // Add model to unservedModels_ if not already tracked
-  auto umit = unservedModels_.find(modelName);
-  if (umit == unservedModels_.end()) {
-    unservedModels_.emplace(modelName, path);
-  }
+  // Track dynamically loaded model in service maps
+  auto& modelInfo(models_.emplace(modelName, path).first->second);
+  modelInfo.servers.insert(Server::fallbackName);
+  sit->second.models.insert(modelName);
 
   if (verbose_)
     edm::LogInfo("TritonService") << "Successfully loaded model " << modelName << " on fallback server";
-
   return true;
 }
 
@@ -627,7 +622,6 @@ bool TritonService::unloadModel(const std::string& modelName) {
     return false;
   }
 
-  // Decrement reference count and check if still in use
   refIt->second--;
   if (refIt->second > 0) {
     if (verbose_)
@@ -635,8 +629,6 @@ bool TritonService::unloadModel(const std::string& modelName) {
     return true;
   }
 
-  // Reference count reached 0, unload from fallback server only
-  // (dynamic unloading is only supported for fallback server)
   auto sit = servers_.find(Server::fallbackName);
   if (sit == servers_.end()) {
     edm::LogWarning("TritonService") << "unloadModel: Fallback server not found";
@@ -655,11 +647,9 @@ bool TritonService::unloadModel(const std::string& modelName) {
   auto err = client->UnloadModel(modelName);
   TRITON_THROW_IF_ERROR(err, "unloadModel: failed to unload model " + modelName + " from fallback server", false);
 
-  // Remove from tracking
   modelRefCount_.erase(refIt);
 
   if (verbose_)
     edm::LogInfo("TritonService") << "Successfully unloaded model " << modelName << " from fallback server";
-
   return true;
 }

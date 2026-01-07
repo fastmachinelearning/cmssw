@@ -16,8 +16,6 @@ class DynamicModelLoadingProducer : public TritonEDProducer<> {
 public:
   explicit DynamicModelLoadingProducer(edm::ParameterSet const& cfg)
       : TritonEDProducer<>(cfg),
-        testModelName_(cfg.getParameter<std::string>("testModelName")),
-        testModelPath_(cfg.getParameter<std::string>("testModelPath")),
         loadUnloadCycles_(cfg.getParameter<int>("loadUnloadCycles")),
         testConcurrency_(cfg.getParameter<bool>("testConcurrency")) {
     putToken_ = produces<edmtest::IntProduct>();
@@ -25,12 +23,13 @@ public:
 
   void acquire(edm::Event const& iEvent, edm::EventSetup const& iSetup, Input& iInput) override {
     edm::Service<TritonService> ts;
+    const std::string& modelName = client_->modelName();
 
     // Test dynamic loading and unloading
     if (testConcurrency_) {
       // Stress test with multiple rapid load/unload cycles
       for (int i = 0; i < loadUnloadCycles_; ++i) {
-        bool loadResult = ts->loadModel(testModelName_, testModelPath_);
+        bool loadResult = ts->loadModel(modelName);
         edm::LogInfo("DynamicModelLoadingProducer")
             << "Load attempt " << i << ": " << (loadResult ? "success" : "failed");
 
@@ -39,16 +38,16 @@ public:
           std::this_thread::yield();
         }
 
-        bool unloadResult = ts->unloadModel(testModelName_);
+        bool unloadResult = ts->unloadModel(modelName);
         edm::LogInfo("DynamicModelLoadingProducer")
             << "Unload attempt " << i << ": " << (unloadResult ? "success" : "failed");
       }
     } else {
       // Simple test: load once, unload once
-      bool loadResult = ts->loadModel(testModelName_, testModelPath_);
+      bool loadResult = ts->loadModel(modelName);
       edm::LogInfo("DynamicModelLoadingProducer") << "Single load: " << (loadResult ? "success" : "failed");
 
-      bool unloadResult = ts->unloadModel(testModelName_);
+      bool unloadResult = ts->unloadModel(modelName);
       edm::LogInfo("DynamicModelLoadingProducer") << "Single unload: " << (unloadResult ? "success" : "failed");
     }
 
@@ -70,16 +69,12 @@ public:
   static void fillDescriptions(edm::ConfigurationDescriptions& descriptions) {
     edm::ParameterSetDescription desc;
     TritonClient::fillPSetDescription(desc);
-    desc.add<std::string>("testModelName", "test_model");
-    desc.add<std::string>("testModelPath", "/path/to/test_model");
     desc.add<int>("loadUnloadCycles", 1);
     desc.add<bool>("testConcurrency", false);
     descriptions.addWithDefaultLabel(desc);
   }
 
 private:
-  std::string testModelName_;
-  std::string testModelPath_;
   int loadUnloadCycles_;
   bool testConcurrency_;
   edm::EDPutTokenT<edmtest::IntProduct> putToken_;

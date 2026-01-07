@@ -18,24 +18,31 @@ void RetryActionDiffServer::retry() {
 
   try {
     auto* tritonClient = static_cast<TritonClient*>(client_);
-    edm::LogInfo("RetryActionDiffServer") << "Attempting retry by switching to fallback server";
     edm::Service<TritonService> ts;
 
-    // Fallback-only: update client to fallback server and dynamically load the model there
-    const std::string& fallbackName = TritonService::Server::fallbackName;
-    tritonClient->updateServer(fallbackName);
+    // First, try to find another remote server
+    auto bestServer = ts->getBestServer(tritonClient->modelName(), tritonClient->serverName());
+    if (bestServer) {
+      edm::LogInfo("RetryActionDiffServer") << "Attempting retry with alternative server: " << *bestServer;
+      tritonClient->updateServer(*bestServer);
+      eval();
+    } else {
+      // No remote server available, fall back to local fallback server with dynamic loading
+      edm::LogInfo("RetryActionDiffServer") << "No alternative remote server available, trying fallback server";
+      tritonClient->updateServer(TritonService::Server::fallbackName);
 
-    // Load model on fallback (path not required for explicit control mode)
-    bool loaded = ts->loadModel(tritonClient->modelName(), "");
-    if (!loaded) {
-      edm::LogWarning("RetryActionDiffServer") << "Fallback dynamic load failed for model "
-                                                << tritonClient->modelName();
-      this->shouldRetry_ = false;
-      return;
+      // Load model on fallback (path is retrieved from models_ map)
+      bool loaded = ts->loadModel(tritonClient->modelName());
+      if (!loaded) {
+        edm::LogWarning("RetryActionDiffServer") << "Fallback dynamic load failed for model "
+                                                  << tritonClient->modelName();
+        this->shouldRetry_ = false;
+        return;
+      }
+
+      // Re-evaluate on fallback
+      eval();
     }
-
-    // Re-evaluate on fallback
-    eval();
   } catch (TritonException& e) {
     e.convertToWarning();
   } catch (std::exception& e) {

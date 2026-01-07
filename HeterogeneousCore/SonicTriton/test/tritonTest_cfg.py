@@ -16,7 +16,7 @@ models = {
 allowed_modes = ["Async","PseudoAsync","Sync"]
 
 parser = getParser()
-parser.add_argument("--modules", metavar=("MODULES"), default=["DynamicModelLoadingProducer"], nargs='+', type=str, choices=list(models), help="list of modules to run (choices: %(choices)s)")
+parser.add_argument("--modules", metavar=("MODULES"), default=["TritonGraphProducer"], nargs='+', type=str, choices=list(models), help="list of modules to run (choices: %(choices)s)")
 parser.add_argument("--models", default=["gat_test"], nargs='+', type=str, help="list of models (same length as modules, or just 1 entry if all modules use same model)")
 parser.add_argument("--mode", default="Async", type=str, choices=allowed_modes, help="mode for client")
 parser.add_argument("--brief", default=False, action="store_true", help="briefer output for graph modules")
@@ -88,11 +88,7 @@ for im,module in enumerate(options.modules):
             processModule.edgeMax = cms.uint32(15000)
         processModule.brief = cms.bool(options.brief)
     elif module=="DynamicModelLoadingProducer":
-        # Configure dynamic model loading test
-        # NOTE: This test requires the fallback server to be started with explicit model control mode
-        # (--model-control-mode explicit flag), otherwise dynamic loading will fail
-        processModule.testModelName = cms.string(model)
-        processModule.testModelPath = cms.string("HeterogeneousCore/SonicTriton/data/models/{}".format(model))
+        # Configure dynamic model loading test (requires explicit model control mode, enabled by default in cmsTriton)
         processModule.loadUnloadCycles = cms.int32(options.loadUnloadCycles)
         processModule.testConcurrency = cms.bool(options.testConcurrency)
     process.p += processModule

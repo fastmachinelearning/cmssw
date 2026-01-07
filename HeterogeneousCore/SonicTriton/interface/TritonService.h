@@ -154,7 +154,7 @@ public:
   // Dynamic model loading/unloading - only supported for the fallback server
   // The fallback server must be started with explicit model control mode
   // (--model-control-mode explicit) for these functions to work
-  bool loadModel(const std::string& modelName, const std::string& path);
+  bool loadModel(const std::string& modelName);
   bool unloadModel(const std::string& modelName);
 
 private:

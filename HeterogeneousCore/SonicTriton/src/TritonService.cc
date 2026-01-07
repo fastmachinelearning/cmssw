@@ -194,10 +194,12 @@ void TritonService::addModel(const std::string& modelName, const std::string& pa
   if (!allowAddModel_)
     throw cms::Exception("DisallowedAddModel")
         << "TritonService: Attempt to call addModel() outside of module constructors";
-  // Ensure model exists in declared models; preserve non-empty path if provided
+
   auto& modelInfo(models_.emplace(modelName, path).first->second);
-  if (modelInfo.path.empty() && !path.empty()) modelInfo.path = path;
-  // Track the module using this model
+  // Update path if model was previously added (e.g., by server scanning) with empty path
+  if (modelInfo.path.empty() && !path.empty())
+    modelInfo.path = path;
+
   modelInfo.modules.insert(currentModuleId_);
   modules_.emplace(currentModuleId_, modelName);
 }
@@ -393,8 +395,6 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
     fallbackOpts_.command += " -r " + std::to_string(fallbackOpts_.retries);
   if (fallbackOpts_.wait >= 0)
     fallbackOpts_.command += " -w " + std::to_string(fallbackOpts_.wait);
-  // Explicit model control mode is required for dynamic loading
-  fallbackOpts_.command += " --model-control-mode explicit";
   for (const auto& [modelName, model] : models_) {
     if (model.path.empty()) continue;
     fallbackOpts_.command += " -m " + model.path;
@@ -561,13 +561,19 @@ void TritonService::fillDescriptions(edm::ConfigurationDescriptions& description
   descriptions.addWithDefaultLabel(desc);
 }
 
-bool TritonService::loadModel(const std::string& modelName, const std::string& path) {
+bool TritonService::loadModel(const std::string& modelName) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
   // Resolve state and canonicalize fields
   auto& state = fallbackModels_[modelName];
   if (state.modelName.empty()) state.modelName = modelName;
-  if (state.path.empty() && !path.empty()) state.path = path;
+  // Get path from the models_ map (set during addModel)
+  if (state.path.empty()) {
+    auto mit = models_.find(modelName);
+    if (mit != models_.end() && !mit->second.path.empty()) {
+      state.path = mit->second.path;
+    }
+  }
 
   return loadModel(state);
 }

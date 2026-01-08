@@ -589,15 +589,14 @@ bool TritonService::loadModel(FallbackModelState& state) {
     return true;
   }
 
-  auto sit = servers_.find(Server::fallbackName);
-  if (sit == servers_.end()) {
-    throw cms::Exception("TritonService")
-        << "loadModel: fallback server not found for model '" << state.modelName << "'";
-  }
-
   if (!startedFallback_) {
     throw cms::Exception("TritonService")
         << "loadModel: fallback server not started; cannot load model '" << state.modelName << "'";
+  }
+
+  auto sit = servers_.find(Server::fallbackName);
+  if (sit == servers_.end()) {
+    throw cms::Exception("TritonService") << "loadModel: fallback server not found";
   }
 
   std::unique_ptr<tc::InferenceServerGrpcClient> client;
@@ -606,16 +605,18 @@ bool TritonService::loadModel(FallbackModelState& state) {
                         "loadModel: unable to create client for fallback server",
                         false);
 
-  auto err = client->LoadModel(state.modelName);
-  TRITON_THROW_IF_ERROR(err, "loadModel: failed to load model " + state.modelName + " on fallback server", false);
+  TRITON_THROW_IF_ERROR(
+      client->LoadModel(state.modelName), "loadModel: failed to load model " + state.modelName + " on fallback server", false);
 
   // Update state and tracking
   state.refCount = 1;
   modelRefCount_[state.modelName] = state.refCount;
 
-  // Track dynamically loaded model in service maps
-  auto& modelInfo(models_.emplace(state.modelName, state.path).first->second);
-  modelInfo.servers.insert(Server::fallbackName);
+  // Update server associations (model already exists in models_ from addModel)
+  auto mit = models_.find(state.modelName);
+  if (mit != models_.end()) {
+    mit->second.servers.insert(Server::fallbackName);
+  }
   sit->second.models.insert(state.modelName);
 
   if (verbose_)
@@ -643,7 +644,7 @@ bool TritonService::unloadModel(FallbackModelState& state) {
   }
 
   if (state.refCount > 1) {
-    --(state.refCount);
+    --state.refCount;
     modelRefCount_[state.modelName] = state.refCount;
     if (verbose_)
       edm::LogInfo("TritonService") << "Model " << state.modelName << " still in use, ref count: "
@@ -666,8 +667,8 @@ bool TritonService::unloadModel(FallbackModelState& state) {
                         "unloadModel: unable to create client for fallback server",
                         false);
 
-  auto err = client->UnloadModel(state.modelName);
-  TRITON_THROW_IF_ERROR(err, "unloadModel: failed to unload model " + state.modelName + " from fallback server",
+  TRITON_THROW_IF_ERROR(client->UnloadModel(state.modelName),
+                        "unloadModel: failed to unload model " + state.modelName + " from fallback server",
                         false);
 
   modelRefCount_.erase(state.modelName);

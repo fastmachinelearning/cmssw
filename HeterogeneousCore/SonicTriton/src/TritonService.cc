@@ -564,34 +564,28 @@ void TritonService::fillDescriptions(edm::ConfigurationDescriptions& description
 bool TritonService::loadModel(const std::string& modelName) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
-  // Resolve state and canonicalize fields
-  auto& state = fallbackModels_[modelName];
-  if (state.modelName.empty()) state.modelName = modelName;
-  // Get path from the models_ map (set during addModel)
-  if (state.path.empty()) {
-    auto mit = models_.find(modelName);
-    if (mit != models_.end() && !mit->second.path.empty()) {
-      state.path = mit->second.path;
-    }
+  // Get model from models_ map (should exist from addModel during module construction)
+  auto mit = models_.find(modelName);
+  if (mit == models_.end()) {
+    edm::LogWarning("TritonService") << "loadModel: Model " << modelName << " not found in models_ map";
+    return false;
   }
 
-  return loadModel(state);
+  return loadModel(modelName, mit->second);
 }
 
-bool TritonService::loadModel(FallbackModelState& state) {
+bool TritonService::loadModel(const std::string& modelName, Model& model) {
   // if already loaded, bump refcount
-  if (state.refCount > 0) {
-    ++state.refCount;
-    modelRefCount_[state.modelName] = state.refCount;
+  if (model.refCount > 0) {
+    ++model.refCount;
     if (verbose_)
-      edm::LogInfo("TritonService") << "Model " << state.modelName << " already loaded, ref count: "
-                                     << state.refCount;
+      edm::LogInfo("TritonService") << "Model " << modelName << " already loaded, ref count: " << model.refCount;
     return true;
   }
 
   if (!startedFallback_) {
     throw cms::Exception("TritonService")
-        << "loadModel: fallback server not started; cannot load model '" << state.modelName << "'";
+        << "loadModel: fallback server not started; cannot load model '" << modelName << "'";
   }
 
   auto sit = servers_.find(Server::fallbackName);
@@ -606,49 +600,42 @@ bool TritonService::loadModel(FallbackModelState& state) {
                         false);
 
   TRITON_THROW_IF_ERROR(
-      client->LoadModel(state.modelName), "loadModel: failed to load model " + state.modelName + " on fallback server", false);
+      client->LoadModel(modelName), "loadModel: failed to load model " + modelName + " on fallback server", false);
 
   // Update state and tracking
-  state.refCount = 1;
-  modelRefCount_[state.modelName] = state.refCount;
-
-  // Update server associations (model already exists in models_ from addModel)
-  auto mit = models_.find(state.modelName);
-  if (mit != models_.end()) {
-    mit->second.servers.insert(Server::fallbackName);
-  }
-  sit->second.models.insert(state.modelName);
+  model.refCount = 1;
+  model.servers.insert(Server::fallbackName);
+  sit->second.models.insert(modelName);
+  fallbackLoadedModels_.insert(modelName);
 
   if (verbose_)
-    edm::LogInfo("TritonService") << "Successfully loaded model " << state.modelName << " on fallback server";
+    edm::LogInfo("TritonService") << "Successfully loaded model " << modelName << " on fallback server";
   return true;
 }
 
 bool TritonService::unloadModel(const std::string& modelName) {
   std::lock_guard<std::mutex> lock(modelLoadMutex_);
 
-  auto it = fallbackModels_.find(modelName);
-  if (it == fallbackModels_.end()) {
+  // Get model from models_ map
+  auto mit = models_.find(modelName);
+  if (mit == models_.end()) {
+    edm::LogWarning("TritonService") << "unloadModel: Model " << modelName << " not found in models_ map";
+    return false;
+  }
+
+  return unloadModel(modelName, mit->second);
+}
+
+bool TritonService::unloadModel(const std::string& modelName, Model& model) {
+  if (model.refCount == 0) {
     edm::LogWarning("TritonService") << "unloadModel: Model " << modelName << " is not loaded";
     return false;
   }
-  // Ensure struct has canonical name
-  if (it->second.modelName.empty()) it->second.modelName = modelName;
-  return unloadModel(it->second);
-}
 
-bool TritonService::unloadModel(FallbackModelState& state) {
-  if (state.refCount == 0) {
-    edm::LogWarning("TritonService") << "unloadModel: Model " << state.modelName << " is not loaded";
-    return false;
-  }
-
-  if (state.refCount > 1) {
-    --state.refCount;
-    modelRefCount_[state.modelName] = state.refCount;
+  if (model.refCount > 1) {
+    --model.refCount;
     if (verbose_)
-      edm::LogInfo("TritonService") << "Model " << state.modelName << " still in use, ref count: "
-                                     << state.refCount;
+      edm::LogInfo("TritonService") << "Model " << modelName << " still in use, ref count: " << model.refCount;
     return true;
   }
 
@@ -659,7 +646,7 @@ bool TritonService::unloadModel(FallbackModelState& state) {
   }
 
   if (verbose_)
-    edm::LogInfo("TritonService") << "Model " << state.modelName << " ref count is 1, unloading from fallback server";
+    edm::LogInfo("TritonService") << "Model " << modelName << " ref count is 1, unloading from fallback server";
 
   std::unique_ptr<tc::InferenceServerGrpcClient> client;
   TRITON_THROW_IF_ERROR(tc::InferenceServerGrpcClient::Create(
@@ -667,21 +654,16 @@ bool TritonService::unloadModel(FallbackModelState& state) {
                         "unloadModel: unable to create client for fallback server",
                         false);
 
-  TRITON_THROW_IF_ERROR(client->UnloadModel(state.modelName),
-                        "unloadModel: failed to unload model " + state.modelName + " from fallback server",
+  TRITON_THROW_IF_ERROR(client->UnloadModel(modelName),
+                        "unloadModel: failed to unload model " + modelName + " from fallback server",
                         false);
 
-  modelRefCount_.erase(state.modelName);
-  state.refCount = 0;
-
-  // Update dynamic tracking: remove fallback association
-  auto mit = models_.find(state.modelName);
-  if (mit != models_.end()) {
-    mit->second.servers.erase(Server::fallbackName);
-  }
-  sit->second.models.erase(state.modelName);
+  model.refCount = 0;
+  model.servers.erase(Server::fallbackName);
+  sit->second.models.erase(modelName);
+  fallbackLoadedModels_.erase(modelName);
 
   if (verbose_)
-    edm::LogInfo("TritonService") << "Successfully unloaded model " << state.modelName << " from fallback server";
+    edm::LogInfo("TritonService") << "Successfully unloaded model " << modelName << " from fallback server";
   return true;
 }

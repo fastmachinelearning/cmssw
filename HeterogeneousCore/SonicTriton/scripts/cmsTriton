@@ -30,7 +30,7 @@ if [ "$OSVERSION" -eq 7 ]; then
 fi
 DEVICE=auto
 THREADCONTROL=""
-MODELCONTROL="explicit"
+MODELCONTROL="none"
 
 get_sandbox(){
 	if [ -z "$SANDBOX" ]; then

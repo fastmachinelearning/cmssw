@@ -584,8 +584,7 @@ bool TritonService::loadModel(const std::string& modelName, Model& model) {
   }
 
   if (!startedFallback_) {
-    throw cms::Exception("TritonService")
-        << "loadModel: fallback server not started; cannot load model '" << modelName << "'";
+    throw cms::Exception("TritonService") << "loadModel: fallback server not started";
   }
 
   auto sit = servers_.find(Server::fallbackName);

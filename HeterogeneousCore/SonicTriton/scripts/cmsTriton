@@ -98,7 +98,7 @@ while getopts "cC:Dd:fg:i:I:LM:m:n:P:p:r:s:t:vw:h" opt; do
 		;;
 		I) INSTANCES="$OPTARG"
 		;;
-		L) MODELCONTROL=""
+		L) MODELCONTROL="none"
 		;;
 		M) REPOS+=("$OPTARG")
 		;;

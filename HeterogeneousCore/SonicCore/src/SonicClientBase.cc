@@ -71,53 +71,55 @@ void SonicClientBase::finish(bool success, std::exception_ptr eptr) {
     edm::LogInfo("SonicClientBase") << "finish: failed after total tries of " << totalTries_;
     for (const auto& action : retryActions_) {
       if (action->shouldRetry()) {
-        edm::LogInfo("SonicClientBase") << "Calling retry()"; 
-        action->retry();  // Call retry only if shouldRetry_ is true
+        edm::LogInfo("SonicClientBase") << "Calling retry()";
+        action->retry();
 
-        // After calling retry, recheck if retries are still available
+        // After calling retry(), recheck if this action should still be tried
         if (!action->shouldRetry()) {
           edm::LogInfo("SonicClientBase") << "Retry action exhausted after retry()";
-          continue; // Allow checking the next action
+          // check the next action for retry()
+          continue;
+        } else {
+          // client->evaluate() will be called by a valid action->retry(); return and wait for another finish()
+          return;
         }
-        return; // eval() is called by a retry(), return and wait for finish() 
       }
     }
-    //prepare an exception if no more retries left
-    edm::LogInfo("SonicClientBase") << "SonicCallFailed: call failed, no retry actions available after " << totalTries_
-                                    << " tries.";
+    //prepare an exception if no more retry actions left
+    edm::LogInfo("SonicClientBase") << "SonicCallFailed: call failed, no retry actions available after "
+                                    << totalTries_ << " tries.";
     edm::Exception ex(edm::errors::ExternalFailure);
     ex << "SonicCallFailed: call failed, no retry actions available after " << totalTries_ << " tries.";
     eptr = make_exception_ptr(ex);
+    if (holder_) {
+      holder_->doneWaiting(eptr);
+      holder_.reset();
+    } else if (eptr)
+      std::rethrow_exception(eptr);
+
+    //reset client data now (usually done at end of produce())
+    if (eptr)
+      reset();
   }
-  if (holder_) {
-    holder_->doneWaiting(eptr);
-    holder_.reset();
-  } else if (eptr)
-    std::rethrow_exception(eptr);
 
-  //reset client data now (usually done at end of produce())
-  if (eptr)
-    reset();
-}
+  void SonicClientBase::fillBasePSetDescription(edm::ParameterSetDescription & desc, bool allowRetry) {
+    //restrict allowed values
+    desc.ifValue(edm::ParameterDescription<std::string>("mode", "PseudoAsync", true),
+                 edm::allowedValues<std::string>("Sync", "Async", "PseudoAsync"));
+    if (allowRetry) {
+      // Defines the structure of each entry in the VPSet
+      edm::ParameterSetDescription retryDesc;
+      retryDesc.add<std::string>("retryType", "RetrySameServerAction");
+      retryDesc.addUntracked<unsigned>("allowedTries", 0);
 
-void SonicClientBase::fillBasePSetDescription(edm::ParameterSetDescription& desc, bool allowRetry) {
-  //restrict allowed values
-  desc.ifValue(edm::ParameterDescription<std::string>("mode", "PseudoAsync", true),
-               edm::allowedValues<std::string>("Sync", "Async", "PseudoAsync"));
-  if (allowRetry) {
-    // Defines the structure of each entry in the VPSet
-    edm::ParameterSetDescription retryDesc;
-    retryDesc.add<std::string>("retryType", "RetrySameServerAction");
-    retryDesc.addUntracked<unsigned>("allowedTries", 0);
+      // Define a default retry action
+      edm::ParameterSet defaultRetry;
+      defaultRetry.addParameter<std::string>("retryType", "RetrySameServerAction");
+      defaultRetry.addUntrackedParameter<unsigned>("allowedTries", 0);
 
-    // Define a default retry action
-    edm::ParameterSet defaultRetry;
-    defaultRetry.addParameter<std::string>("retryType", "RetrySameServerAction");
-    defaultRetry.addUntrackedParameter<unsigned>("allowedTries", 0);
-
-    // Add the VPSet with the default retry action
-    desc.addVPSet("Retry", retryDesc, {defaultRetry});
+      // Add the VPSet with the default retry action
+      desc.addVPSet("Retry", retryDesc, {defaultRetry});
+    }
+    desc.add("sonicClientBase", desc);
+    desc.addUntracked<bool>("verbose", false);
   }
-  desc.add("sonicClientBase", desc);
-  desc.addUntracked<bool>("verbose", false);
-}

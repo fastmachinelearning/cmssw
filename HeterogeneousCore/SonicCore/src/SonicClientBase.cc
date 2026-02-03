@@ -68,10 +68,18 @@ void SonicClientBase::finish(bool success, std::exception_ptr eptr) {
   //retries are only allowed if no exception was raised
   if (!success and !eptr) {
     ++totalTries_;
+    edm::LogInfo("SonicClientBase") << "finish: failed after total tries of " << totalTries_;
     for (const auto& action : retryActions_) {
       if (action->shouldRetry()) {
+        edm::LogInfo("SonicClientBase") << "Calling retry()"; 
         action->retry();  // Call retry only if shouldRetry_ is true
-        return;
+
+        // After calling retry, recheck if retries are still available
+        if (!action->shouldRetry()) {
+          edm::LogInfo("SonicClientBase") << "Retry action exhausted after retry()";
+          continue; // Allow checking the next action
+        }
+        return; // eval() is called by a retry(), return and wait for finish() 
       }
     }
     //prepare an exception if no more retries left

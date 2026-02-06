@@ -30,7 +30,7 @@ if [ "$OSVERSION" -eq 7 ]; then
 fi
 DEVICE=auto
 THREADCONTROL=""
-MODELCONTROL="none"
+MODELCONTROL="explicit"
 
 get_sandbox(){
 	if [ -z "$SANDBOX" ]; then
@@ -98,7 +98,7 @@ while getopts "cC:Dd:fg:i:I:LM:m:n:P:p:r:s:t:vw:h" opt; do
 		;;
 		I) INSTANCES="$OPTARG"
 		;;
-		L) MODELCONTROL="none"
+		L) MODELCONTROL=""
 		;;
 		M) REPOS+=("$OPTARG")
 		;;

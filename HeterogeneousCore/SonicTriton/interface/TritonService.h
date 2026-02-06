@@ -163,6 +163,9 @@ private:
   //helper
   template <typename LOG>
   void printFallbackServerLog() const;
+  // Internal helpers that operate on Model directly (caller holds lock)
+  bool loadModel(const std::string& modelName, Model& model);
+  bool unloadModel(const std::string& modelName, Model& model);
 
   bool verbose_;
   FallbackOpts fallbackOpts_;
@@ -175,12 +178,14 @@ private:
   std::unordered_map<std::string, Server> servers_;
   //server health needs concurrent-safe edits
   tbb::concurrent_hash_map<std::string, ServerHealth> serversHealth_;
-  tbb::concurrent_hash_map<std::string, Model> models_;
+  std::unordered_map<std::string, Model> models_;
   std::unordered_map<unsigned, Module> modules_;
   int numberOfThreads_;
 
-  // Protects servers_[fallbackName].models updates during dynamic load/unload
-  std::mutex serverModelsMutex_;
+  //Dynamic model loading and unloading (fallback server only)
+  std::mutex modelLoadMutex_;
+  // Model names currently loaded on the fallback server
+  std::unordered_set<std::string> fallbackLoadedModels_;
 };
 
 #endif

@@ -119,11 +119,14 @@ TritonService::TritonService(const edm::ParameterSet& pset, edm::ActivityRegistr
           << "TritonService: Not allowed to specify more than one server with same name (" << serverName << ")";
   }
 
-  //loop over all servers: check which models they have
+  //loop over all servers: check which models they have, populate serverHealth
   std::string msg;
   if (verbose_)
     msg = "List of models for each server:\n";
   for (auto& [serverName, server] : servers_) {
+    //populate serverHealth
+    serversHealth_.emplace(serverName, ServerHealth{});
+
     std::unique_ptr<tc::InferenceServerGrpcClient> client;
     TRITON_THROW_IF_ERROR(
         tc::InferenceServerGrpcClient::Create(&client, server.url, false, server.useSsl, server.sslOptions),
@@ -137,7 +140,8 @@ TritonService::TritonService(const edm::ParameterSet& pset, edm::ActivityRegistr
         edm::LogInfo("TritonService") << "Server " << serverName << ": url = " << server.url
                                       << ", version = " << serverMetaResponse.version();
       else
-        edm::LogInfo("TritonService") << "unable to get metadata for " + serverName + " (" + server.url + ")";
+        edm::LogInfo("TritonService") << "unable to get metadata for " + serverName + " (" + server.url + ")"
+                                      << err.Message();
     }
 
     //if this query fails, it indicates that the server is nonresponsive or saturated
@@ -190,40 +194,35 @@ void TritonService::addModel(const std::string& modelName, const std::string& pa
   if (!allowAddModel_)
     throw cms::Exception("DisallowedAddModel")
         << "TritonService: Attempt to call addModel() outside of module constructors";
-  //if model is not in the list, then no specified server provides it
-  auto mit = models_.find(modelName);
-  if (mit == models_.end()) {
-    auto& modelInfo(unservedModels_.emplace(modelName, path).first->second);
-    modelInfo.modules.insert(currentModuleId_);
-    //only keep track of modules that need unserved models
-    modules_.emplace(currentModuleId_, modelName);
-  }
+
+  auto& modelInfo(models_.emplace(modelName, path).first->second);
+  // Update path if model was previously added (e.g., by server scanning) with empty path
+  if (modelInfo.path.empty() && !path.empty())
+    modelInfo.path = path;
+
+  modelInfo.modules.insert(currentModuleId_);
+  modules_.emplace(currentModuleId_, modelName);
 }
 
 void TritonService::postModuleConstruction(edm::ModuleDescription const& desc) { allowAddModel_ = false; }
 
 void TritonService::preModuleDestruction(edm::ModuleDescription const& desc) {
-  //remove destructed modules from unserved list
-  if (unservedModels_.empty())
-    return;
   auto id = desc.id();
   auto oit = modules_.find(id);
   if (oit != modules_.end()) {
     const auto& moduleInfo(oit->second);
-    auto mit = unservedModels_.find(moduleInfo.model);
-    if (mit != unservedModels_.end()) {
+    auto mit = models_.find(moduleInfo.model);
+    if (mit != models_.end()) {
       auto& modelInfo(mit->second);
       modelInfo.modules.erase(id);
-      //remove a model if it is no longer needed by any modules
-      if (modelInfo.modules.empty())
-        unservedModels_.erase(mit);
     }
     modules_.erase(oit);
   }
 }
 
 //second return value is only true if fallback CPU server is being used
-TritonService::Server TritonService::serverInfo(const std::string& model, const std::string& preferred) const {
+const std::pair<const std::string, TritonService::Server>& TritonService::serverInfo(
+    const std::string& model, const std::string& preferred) const {
   auto mit = models_.find(model);
   if (mit == models_.end())
     throw cms::Exception("MissingModel") << "TritonService: There are no servers that provide model " << model;
@@ -241,13 +240,120 @@ TritonService::Server TritonService::serverInfo(const std::string& model, const 
   const auto& serverName(msit == modelServers.end() ? *modelServers.begin() : preferred);
 
   //todo: use some algorithm to select server rather than just picking arbitrarily
-  const auto& server(servers_.find(serverName)->second);
-  return server;
+  const auto serverPair = servers_.find(serverName);
+  return *serverPair;
+}
+
+void TritonService::updateServerHealth(const std::string& modelName) {
+  for (auto& [serverName, server] : servers_) {
+    try {
+      std::unique_ptr<tc::InferenceServerGrpcClient> client;
+      TRITON_THROW_IF_ERROR(
+          tc::InferenceServerGrpcClient::Create(&client, server.url, false, server.useSsl, server.sslOptions),
+          "TritonService(): unable to create inference context for " + serverName + " (" + server.url + ")",
+          false);
+
+      bool live = false, ready = false;
+      client->IsServerLive(&live);
+      client->IsServerReady(&ready);
+
+      inference::ModelStatisticsResponse stats;
+      if (!modelName.empty()) {
+        client->ModelInferenceStatistics(&stats, modelName);
+      } else {
+        for (const auto& m : server.models) {
+          client->ModelInferenceStatistics(&stats, m);
+        }
+      }
+
+      uint64_t infer_count = 0, queue_count = 0, failures = 0;
+      double avgQueueTimeMs = 0.0;
+      double avgInferTimeMs = 0.0;
+
+      for (const auto& mstat : stats.model_stats()) {
+        if (modelName.empty() || mstat.name() == modelName) {
+          const auto& infer = mstat.inference_stats();
+
+          infer_count += infer.compute_infer().count();
+          avgInferTimeMs += infer.compute_infer().ns() / 1e3;
+          queue_count += infer.queue().count();
+          avgQueueTimeMs += infer.queue().ns() / 1e3;
+          failures += infer.fail().count();
+        }
+      }
+      // Update health map safely with accessor
+      tbb::concurrent_hash_map<std::string, ServerHealth>::accessor acc;
+      serversHealth_.find(acc, serverName);
+
+      ServerHealth& health = acc->second;
+      health.live = live;
+      health.ready = ready;
+      health.failureCount = failures;
+      health.avgQueueTimeMs = avgQueueTimeMs / queue_count;
+      health.avgInferTimeMs = avgInferTimeMs / infer_count;
+
+    } catch (const TritonException& e) {
+      // mark existing entry unhealthy if present
+      tbb::concurrent_hash_map<std::string, ServerHealth>::accessor acc;
+      if (serversHealth_.find(acc, serverName)) {
+        ServerHealth& health = acc->second;
+        health.live = false;
+        health.ready = false;
+      }
+    } catch (const std::exception& e) {
+      // fallback for other exceptions
+      tbb::concurrent_hash_map<std::string, ServerHealth>::accessor acc;
+      if (serversHealth_.find(acc, serverName)) {
+        ServerHealth& health = acc->second;
+        health.live = false;
+        health.ready = false;
+      }
+    }
+  }
+}
+
+std::optional<std::string> TritonService::getBestServer(const std::string& modelName, const std::string& IgnoreServer) {
+  std::optional<std::string> bestServerName;
+  ServerHealth bestHealth;
+
+  // get fresh ServerHealth statistics
+  updateServerHealth(modelName);
+
+  for (auto& [serverName, server] : servers_) {
+    if (serverName == IgnoreServer)
+      continue;  // skip ignored server
+    if (server.models.find(modelName) == server.models.end())
+      continue;  // server doesn't have model
+
+    tbb::concurrent_hash_map<std::string, ServerHealth>::const_accessor acc;
+    if (!serversHealth_.find(acc, serverName))
+      continue;  // no health info
+
+    const ServerHealth& health = acc->second;
+
+    if (!health.live || !health.ready)
+      continue;  // skip unhealthy
+
+    // Select server according to rules:
+    // 1) lowest failureCount
+    // 2) tie-breaker: lowest avgQueueTimeMs
+    if (!bestServerName || health.failureCount < bestHealth.failureCount ||
+        (health.failureCount == bestHealth.failureCount && health.avgQueueTimeMs < bestHealth.avgQueueTimeMs)) {
+      bestServerName = serverName;
+      bestHealth = health;
+    }
+  }
+  if (verbose_ && bestServerName) {
+    edm::LogInfo("TritonDiscovery") << "Chosen server for model '" << modelName << "': " << *bestServerName
+                                     << " (failures=" << bestHealth.failureCount
+                                     << ", avgQueueTime=" << bestHealth.avgQueueTimeMs << " ms)";
+  }
+  return bestServerName;
 }
 
 void TritonService::preBeginJob(edm::ProcessContext const&) {
   //only need fallback if there are unserved models
-  if (!fallbackOpts_.enable or unservedModels_.empty())
+  if (!fallbackOpts_.enable)
     return;
 
   //include fallback server in set
@@ -261,10 +367,12 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
   std::string msg;
   if (verbose_)
     msg = "List of models for fallback server: ";
-  //all unserved models are provided by fallback server
+  // Provide all declared models with known paths via the fallback server
   auto& server(servers_.find(Server::fallbackName)->second);
-  for (const auto& [modelName, model] : unservedModels_) {
-    auto& modelInfo(models_.emplace(modelName, model).first->second);
+  for (const auto& [modelName, model] : models_) {
+    // Only seed models for which we have a repository path
+    if (model.path.empty()) continue;
+    auto& modelInfo(models_.find(modelName)->second);
     modelInfo.servers.insert(Server::fallbackName);
     server.models.insert(modelName);
     if (verbose_)
@@ -287,7 +395,8 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
     fallbackOpts_.command += " -r " + std::to_string(fallbackOpts_.retries);
   if (fallbackOpts_.wait >= 0)
     fallbackOpts_.command += " -w " + std::to_string(fallbackOpts_.wait);
-  for (const auto& [modelName, model] : unservedModels_) {
+  for (const auto& [modelName, model] : models_) {
+    if (model.path.empty()) continue;
     fallbackOpts_.command += " -m " + model.path;
   }
   std::string thread_string = " -I " + std::to_string(numberOfThreads_);
@@ -296,8 +405,7 @@ void TritonService::preBeginJob(edm::ProcessContext const&) {
     fallbackOpts_.command += " -i " + fallbackOpts_.imageName;
   if (!fallbackOpts_.sandboxName.empty())
     fallbackOpts_.command += " -s " + fallbackOpts_.sandboxName;
-  //don't need this anymore
-  unservedModels_.clear();
+  // models_ remains for runtime queries; nothing to clear here
 
   //get a random temporary directory if none specified
   if (fallbackOpts_.tempDir.empty()) {
@@ -451,4 +559,111 @@ void TritonService::fillDescriptions(edm::ConfigurationDescriptions& description
   desc.add<edm::ParameterSetDescription>("fallback", fallbackDesc);
 
   descriptions.addWithDefaultLabel(desc);
+}
+
+bool TritonService::loadModel(const std::string& modelName) {
+  std::lock_guard<std::mutex> lock(modelLoadMutex_);
+
+  // Get model from models_ map (should exist from addModel during module construction)
+  auto mit = models_.find(modelName);
+  if (mit == models_.end()) {
+    edm::LogWarning("TritonService") << "loadModel: Model " << modelName << " not found in models_ map";
+    return false;
+  }
+
+  return loadModel(modelName, mit->second);
+}
+
+bool TritonService::loadModel(const std::string& modelName, Model& model) {
+  // if already loaded, bump refcount
+  if (model.refCount > 0) {
+    ++model.refCount;
+    if (verbose_)
+      edm::LogInfo("TritonService") << "Model " << modelName << " already loaded, ref count: " << model.refCount;
+    return true;
+  }
+
+  if (!startedFallback_) {
+    throw cms::Exception("TritonService")
+        << "loadModel: fallback server not started; cannot load model '" << modelName << "'";
+  }
+
+  auto sit = servers_.find(Server::fallbackName);
+  if (sit == servers_.end()) {
+    throw cms::Exception("TritonService") << "loadModel: fallback server not found";
+  }
+
+  std::unique_ptr<tc::InferenceServerGrpcClient> client;
+  TRITON_THROW_IF_ERROR(tc::InferenceServerGrpcClient::Create(
+                            &client, sit->second.url, false, sit->second.useSsl, sit->second.sslOptions),
+                        "loadModel: unable to create client for fallback server",
+                        false);
+
+  TRITON_THROW_IF_ERROR(
+      client->LoadModel(modelName), "loadModel: failed to load model " + modelName + " on fallback server", false);
+
+  // Update state and tracking
+  model.refCount = 1;
+  model.servers.insert(Server::fallbackName);
+  sit->second.models.insert(modelName);
+  fallbackLoadedModels_.insert(modelName);
+
+  if (verbose_)
+    edm::LogInfo("TritonService") << "Successfully loaded model " << modelName << " on fallback server";
+  return true;
+}
+
+bool TritonService::unloadModel(const std::string& modelName) {
+  std::lock_guard<std::mutex> lock(modelLoadMutex_);
+
+  // Get model from models_ map
+  auto mit = models_.find(modelName);
+  if (mit == models_.end()) {
+    edm::LogWarning("TritonService") << "unloadModel: Model " << modelName << " not found in models_ map";
+    return false;
+  }
+
+  return unloadModel(modelName, mit->second);
+}
+
+bool TritonService::unloadModel(const std::string& modelName, Model& model) {
+  if (model.refCount == 0) {
+    edm::LogWarning("TritonService") << "unloadModel: Model " << modelName << " is not loaded";
+    return false;
+  }
+
+  if (model.refCount > 1) {
+    --model.refCount;
+    if (verbose_)
+      edm::LogInfo("TritonService") << "Model " << modelName << " still in use, ref count: " << model.refCount;
+    return true;
+  }
+
+  auto sit = servers_.find(Server::fallbackName);
+  if (sit == servers_.end()) {
+    edm::LogWarning("TritonService") << "unloadModel: Fallback server not found";
+    return false;
+  }
+
+  if (verbose_)
+    edm::LogInfo("TritonService") << "Model " << modelName << " ref count is 1, unloading from fallback server";
+
+  std::unique_ptr<tc::InferenceServerGrpcClient> client;
+  TRITON_THROW_IF_ERROR(tc::InferenceServerGrpcClient::Create(
+                            &client, sit->second.url, false, sit->second.useSsl, sit->second.sslOptions),
+                        "unloadModel: unable to create client for fallback server",
+                        false);
+
+  TRITON_THROW_IF_ERROR(client->UnloadModel(modelName),
+                        "unloadModel: failed to unload model " + modelName + " from fallback server",
+                        false);
+
+  model.refCount = 0;
+  model.servers.erase(Server::fallbackName);
+  sit->second.models.erase(modelName);
+  fallbackLoadedModels_.erase(modelName);
+
+  if (verbose_)
+    edm::LogInfo("TritonService") << "Successfully unloaded model " << modelName << " from fallback server";
+  return true;
 }

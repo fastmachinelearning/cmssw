@@ -91,6 +91,7 @@ void SonicClientBase::finish(bool success, std::exception_ptr eptr) {
     edm::Exception ex(edm::errors::ExternalFailure);
     ex << "SonicCallFailed: call failed, no retry actions available after " << totalTries_ << " tries.";
     eptr = make_exception_ptr(ex);
+    }
     if (holder_) {
       holder_->doneWaiting(eptr);
       holder_.reset();

@@ -1,11 +1,22 @@
 <test name="TestHeterogeneousCoreSonicTritonProducerCPU" command="unittest.sh ${LOCALTOP} CPU"/>
 <test name="TestHeterogeneousCoreSonicTritonProducerGPU" command="unittest.sh ${LOCALTOP} GPU"/>
+<test name="TestHeterogeneousCoreSonicTritonRetryActionSame" command="cmsRun ${LOCALTOP}/src/HeterogeneousCore/SonicTriton/test/tritonTest_cfg.py --modules TritonGraphProducer  --maxEvents 2 --unittest --device cpu --retryAction same"/>
+<test name="TestHeterogeneousCoreSonicTritonRetryActionDiff" command="cmsRun ${LOCALTOP}/src/HeterogeneousCore/SonicTriton/test/tritonTest_cfg.py --modules TritonGraphProducer  --maxEvents 2 --unittest --device cpu --retryAction diff"/>
 <test name="TestHeterogeneousCoreSonicTritonVersionCheck" command="cmsTritonConfigTool versioncheck">
   <use name="cmsswdata"/>
 </test>
-<library file="*.cc" name="testHeterogenousCoreSonicTriton">
+<library file="TritonGraphModules.cc, TritonIdentityProducer.cc, TritonImageProducer.cc" name="testHeterogenousCoreSonicTriton">
   <flags EDM_PLUGIN="1"/>
   <use name="FWCore/ParameterSet"/>
   <use name="FWCore/Framework"/>
   <use name="HeterogeneousCore/SonicTriton"/>
 </library>
+
+<bin file="test_RetryActionDiffServer.cc" name="TestHeterogeneousCoreSonicTritonRetryActionDiffServer">
+  <use name="catch2"/>
+  <use name="FWCore/ParameterSet"/>
+  <use name="HeterogeneousCore/SonicTriton"/>
+</bin>
+
+<test name="TestHeterogeneousCoreSonicTritonRetryActionDiff_Log" command="retry_action_diff_log_test.sh ${LOCALTOP}"/>
+

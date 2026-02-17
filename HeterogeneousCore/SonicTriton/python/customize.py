@@ -35,6 +35,7 @@ def getParser():
     parser.add_argument("--fallbackName", default="", type=str, help="name for fallback server")
     parser.add_argument("--imageName", default="", type=str, help="container image name for fallback server")
     parser.add_argument("--tempDir", default="", type=str, help="temp directory for fallback server")
+    parser.add_argument("--retryAction", default="same", type=str, choices=["same","diff"], help="retry policy: same server or different server")
 
     return parser
 
@@ -90,12 +91,18 @@ def applyOptions(process, options, applyToModules=False):
     return process
 
 def getClientOptions(options):
+    action = cms.PSet(
+                retryType = cms.string('RetrySameServerAction'),
+                allowedTries = cms.untracked.uint32(options.tries))
+    if options.retryAction != 'same':
+        action.retryType = cms.string('RetryActionDiffServer')
+
     return dict(
         compression = cms.untracked.string(options.compression),
         useSharedMemory = cms.untracked.bool(not options.noShm),
         timeout = cms.untracked.uint32(options.timeout),
         timeoutUnit = cms.untracked.string(options.timeoutUnit),
-        allowedTries = cms.untracked.uint32(options.tries),
+        Retry = cms.VPSet(action)
     )
 
 def applyClientOptions(client, options):

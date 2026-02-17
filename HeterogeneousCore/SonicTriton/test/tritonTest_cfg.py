@@ -21,6 +21,7 @@ parser.add_argument("--mode", default="Async", type=str, choices=allowed_modes, 
 parser.add_argument("--brief", default=False, action="store_true", help="briefer output for graph modules")
 parser.add_argument("--unittest", default=False, action="store_true", help="unit test mode: reduce input sizes")
 parser.add_argument("--testother", default=False, action="store_true", help="also test gRPC communication if shared memory enabled, or vice versa")
+options = parser.parse_args()
 
 options = getOptions(parser, verbose=True)
 

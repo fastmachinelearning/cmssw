@@ -119,11 +119,14 @@ TritonService::TritonService(const edm::ParameterSet& pset, edm::ActivityRegistr
           << "TritonService: Not allowed to specify more than one server with same name (" << serverName << ")";
   }
 
-  //loop over all servers: check which models they have
+  //loop over all servers: check which models they have, populate serverHealth
   std::string msg;
   if (verbose_)
     msg = "List of models for each server:\n";
   for (auto& [serverName, server] : servers_) {
+    //populate serverHealth
+    serversHealth_.emplace(serverName, ServerHealth{});
+
     std::unique_ptr<tc::InferenceServerGrpcClient> client;
     TRITON_THROW_IF_ERROR(
         tc::InferenceServerGrpcClient::Create(&client, server.url, false, server.useSsl, server.sslOptions),
@@ -223,7 +226,8 @@ void TritonService::preModuleDestruction(edm::ModuleDescription const& desc) {
 }
 
 //second return value is only true if fallback CPU server is being used
-TritonService::Server TritonService::serverInfo(const std::string& model, const std::string& preferred) const {
+const std::pair<const std::string, TritonService::Server>& TritonService::serverInfo(
+    const std::string& model, const std::string& preferred) const {
   auto mit = models_.find(model);
   if (mit == models_.end())
     throw cms::Exception("MissingModel") << "TritonService: There are no servers that provide model " << model;
@@ -241,8 +245,115 @@ TritonService::Server TritonService::serverInfo(const std::string& model, const 
   const auto& serverName(msit == modelServers.end() ? *modelServers.begin() : preferred);
 
   //todo: use some algorithm to select server rather than just picking arbitrarily
-  const auto& server(servers_.find(serverName)->second);
-  return server;
+  const auto serverPair = servers_.find(serverName);
+  return *serverPair;
+}
+
+void TritonService::updateServerHealth(const std::string& modelName) {
+  for (auto& [serverName, server] : servers_) {
+    try {
+      std::unique_ptr<tc::InferenceServerGrpcClient> client;
+      TRITON_THROW_IF_ERROR(
+          tc::InferenceServerGrpcClient::Create(&client, server.url, false, server.useSsl, server.sslOptions),
+          "TritonService(): unable to create inference context for " + serverName + " (" + server.url + ")",
+          false);
+
+      bool live = false, ready = false;
+      client->IsServerLive(&live);
+      client->IsServerReady(&ready);
+
+      inference::ModelStatisticsResponse stats;
+      if (!modelName.empty()) {
+        client->ModelInferenceStatistics(&stats, modelName);
+      } else {
+        for (const auto& m : server.models) {
+          client->ModelInferenceStatistics(&stats, m);
+        }
+      }
+
+      uint64_t infer_count = 0, queue_count = 0, failures = 0;
+      double avgQueueTimeMs = 0.0;
+      double avgInferTimeMs = 0.0;
+
+      for (const auto& mstat : stats.model_stats()) {
+        if (modelName.empty() || mstat.name() == modelName) {
+          const auto& infer = mstat.inference_stats();
+
+          infer_count += infer.compute_infer().count();
+          avgInferTimeMs += infer.compute_infer().ns() / 1e3;
+          queue_count += infer.queue().count();
+          avgQueueTimeMs += infer.queue().ns() / 1e3;
+          failures += infer.fail().count();
+        }
+      }
+      // Update health map safely with accessor
+      tbb::concurrent_hash_map<std::string, ServerHealth>::accessor acc;
+      serversHealth_.find(acc, serverName);
+
+      ServerHealth& health = acc->second;
+      health.live = live;
+      health.ready = ready;
+      health.failureCount = failures;
+      health.avgQueueTimeMs = avgQueueTimeMs / queue_count;
+      health.avgInferTimeMs = avgInferTimeMs / infer_count;
+
+    } catch (const TritonException& e) {
+      // mark existing entry unhealthy if present
+      tbb::concurrent_hash_map<std::string, ServerHealth>::accessor acc;
+      if (serversHealth_.find(acc, serverName)) {
+        ServerHealth& health = acc->second;
+        health.live = false;
+        health.ready = false;
+      }
+    } catch (const std::exception& e) {
+      // fallback for other exceptions
+      tbb::concurrent_hash_map<std::string, ServerHealth>::accessor acc;
+      if (serversHealth_.find(acc, serverName)) {
+        ServerHealth& health = acc->second;
+        health.live = false;
+        health.ready = false;
+      }
+    }
+  }
+}
+
+std::optional<std::string> TritonService::getBestServer(const std::string& modelName, const std::string& IgnoreServer) {
+  std::optional<std::string> bestServerName;
+  ServerHealth bestHealth;
+
+  // get fresh ServerHealth statistics
+  updateServerHealth(modelName);
+
+  for (auto& [serverName, server] : servers_) {
+    if (serverName == IgnoreServer)
+      continue;  // skip ignored server
+    if (server.models.find(modelName) == server.models.end())
+      continue;  // server doesn't have model
+
+    tbb::concurrent_hash_map<std::string, ServerHealth>::const_accessor acc;
+    if (!serversHealth_.find(acc, serverName))
+      continue;  // no health info
+
+    const ServerHealth& health = acc->second;
+
+    if (!health.live || !health.ready)
+      continue;  // skip unhealthy
+
+    // Select server according to rules:
+    // 1) lowest failureCount
+    // 2) tie-breaker: lowest avgQueueTimeMs
+    if (!bestServerName || health.failureCount < bestHealth.failureCount ||
+        (health.failureCount == bestHealth.failureCount && health.avgQueueTimeMs < bestHealth.avgQueueTimeMs)) {
+      bestServerName = serverName;
+      bestHealth = health;
+    }
+  }
+  if (verbose_ && bestServerName) {
+    edm::LogInfo("Chosen server for model '" + modelName + "': " + *bestServerName +
+                 " (failures=" + std::to_string(bestHealth.failureCount) +
+                 ", avgQueueTime=" + std::to_string(bestHealth.avgQueueTimeMs) + " ms)");
+  }
+  return bestServerName;
 }
 
 void TritonService::preBeginJob(edm::ProcessContext const&) {

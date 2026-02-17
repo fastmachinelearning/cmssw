@@ -3,6 +3,7 @@
 
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 #include "FWCore/Utilities/interface/GlobalIdentifier.h"
+#include "oneapi/tbb/concurrent_hash_map.h"
 
 #include <vector>
 #include <unordered_set>
@@ -11,6 +12,7 @@
 #include <functional>
 #include <utility>
 #include <atomic>
+#include <optional>
 
 #include "grpc_client.h"
 
@@ -90,6 +92,16 @@ public:
     static const std::string fallbackAddress;
     static const std::string siteconfName;
   };
+  //Dynamic quantities of servers
+  struct ServerHealth {
+    bool live{false};
+    bool ready{false};
+
+    uint64_t inferenceCount{0};
+    uint64_t failureCount{0};
+    double avgQueueTimeMs{0.0};
+    double avgInferTimeMs{0.0};
+  };
   struct Model {
     Model(const std::string& path_ = "") : path(path_) {}
 
@@ -111,7 +123,24 @@ public:
 
   //accessors
   void addModel(const std::string& modelName, const std::string& path);
-  Server serverInfo(const std::string& model, const std::string& preferred = "") const;
+
+  const std::pair<const std::string, TritonService::Server>& serverInfo(const std::string& model,
+                                                                        const std::string& preferred = "") const;
+
+  // update health stats of all servers
+  void updateServerHealth(const std::string& modelName = "");
+
+  // return the best server for retry, ignore the current server
+  std::optional<std::string> getBestServer(const std::string& modelName, const std::string& IgnoreServer = "");
+
+  // helper functions to get server statistics?
+  //  - getServerSideStatus()
+  //  - updateServerStatus()
+  //    - loop over servers_ get statistics
+  //  - getBestServer(model)
+  //    - call updateServerStatus()
+  //    - loop over servers_ get their statistics, compute metric, return server name
+
   const std::string& pid() const { return pid_; }
   void notifyCallStatus(bool status) const;
 
@@ -139,6 +168,8 @@ private:
   std::unordered_map<std::string, Model> unservedModels_;
   //this represents a many:many:many map
   std::unordered_map<std::string, Server> servers_;
+  //server health needs concurrent-safe edits
+  tbb::concurrent_hash_map<std::string, ServerHealth> serversHealth_;
   std::unordered_map<std::string, Model> models_;
   std::unordered_map<unsigned, Module> modules_;
   int numberOfThreads_;

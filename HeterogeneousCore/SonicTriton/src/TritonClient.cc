@@ -583,7 +583,7 @@ void TritonClient::updateServer(const std::string& serverName) {
   const auto& server = serverMap.second;
 
   //update server name
-  serverName_ = serverMap.first; 
+  serverName_ = serverMap.first;
 
   serverType_ = server.type;
   edm::LogInfo("TritonDiscovery") << debugName_ << " assigned server: " << server.url;

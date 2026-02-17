@@ -226,7 +226,8 @@ void TritonService::preModuleDestruction(edm::ModuleDescription const& desc) {
 }
 
 //second return value is only true if fallback CPU server is being used
-const std::pair<const std::string, TritonService::Server>& TritonService::serverInfo(const std::string& model, const std::string& preferred) const {
+const std::pair<const std::string, TritonService::Server>& TritonService::serverInfo(
+    const std::string& model, const std::string& preferred) const {
   auto mit = models_.find(model);
   if (mit == models_.end())
     throw cms::Exception("MissingModel") << "TritonService: There are no servers that provide model " << model;
@@ -316,8 +317,7 @@ void TritonService::updateServerHealth(const std::string& modelName) {
   }
 }
 
-std::optional<std::string> TritonService::getBestServer(const std::string& modelName,
-                                                                  const std::string& IgnoreServer) {
+std::optional<std::string> TritonService::getBestServer(const std::string& modelName, const std::string& IgnoreServer) {
   std::optional<std::string> bestServerName;
   ServerHealth bestHealth;
 
@@ -344,7 +344,7 @@ std::optional<std::string> TritonService::getBestServer(const std::string& model
     // 2) tie-breaker: lowest avgQueueTimeMs
     if (!bestServerName || health.failureCount < bestHealth.failureCount ||
         (health.failureCount == bestHealth.failureCount && health.avgQueueTimeMs < bestHealth.avgQueueTimeMs)) {
-      bestServerName   = serverName;
+      bestServerName = serverName;
       bestHealth = health;
     }
   }

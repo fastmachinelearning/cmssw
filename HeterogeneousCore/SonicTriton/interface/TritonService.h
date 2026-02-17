@@ -124,7 +124,8 @@ public:
   //accessors
   void addModel(const std::string& modelName, const std::string& path);
 
-  const std::pair<const std::string, TritonService::Server>& serverInfo(const std::string& model, const std::string& preferred = "") const;
+  const std::pair<const std::string, TritonService::Server>& serverInfo(const std::string& model,
+                                                                        const std::string& preferred = "") const;
 
   // update health stats of all servers
   void updateServerHealth(const std::string& modelName = "");

@@ -411,7 +411,7 @@ wait_server(){
 list_models(){
 	# make list of model repositories
 	LOCALMODELREPO="local_model_repo"
-	if [ -n "$THREADCONTROL" ]; then
+	if [ -n "$THREADCONTROL" ] || [ -z "$CLEANUP" ]; then
 		if [ -d "$TMPDIR/$LOCALMODELREPO" ]; then
 			#Want to start with a fresh copy of model files in case this directory already exists with local edits
 			rm -rf $TMPDIR/$LOCALMODELREPO
@@ -436,11 +436,20 @@ list_models(){
 				echo "Could not apply threadcontrol to $MODEL"
 				exit "$TOOL_EXIT"
 			fi
+		elif [ -z "$CLEANUP" ]; then # if not cleaning up, we are debugging
+			# Allowed values of "string_value" are "always" or "on_failure"
+			$DRYRUN cmsTritonConfigTool edit -c ${MODEL}/config.pbtxt --copy $TMPDIR/$LOCALMODELREPO \
+				--platform "" --backend "python" --parameters dump_input '{"string_value":"always"}'
+			TOOL_EXIT=$?
+			if [ "$TOOL_EXIT" -ne 0 ]; then
+				echo "Could not apply debug configuration to $MODEL"
+				exit "$TOOL_EXIT"
+			fi
 		else
 			REPOS+=("$(dirname "$MODEL")")
 		fi
 	done
-	if [ -n "$THREADCONTROL" ]; then
+	if [ -n "$THREADCONTROL" ] || [ -z "$CLEANUP" ]; then
 		REPOS=$TMPDIR/$LOCALMODELREPO
 	else
 		for ((r=0; r < ${#REPOS[@]}; r++)); do

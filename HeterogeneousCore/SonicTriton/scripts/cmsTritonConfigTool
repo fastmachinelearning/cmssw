@@ -148,14 +148,14 @@ def edit_msg(model,dest,val):
     item = getattr(model,dest)
     json_format.ParseDict(val,item)
 
-def edit_msg_list(model,dest,val):
+def edit_msg_list(model,dest,vals):
     item = getattr(model,dest)
     item.clear()
     for v in vals:
         m = item.add()
         json_format.ParseDict(v,m)
 
-def edit_msg_map(model,dest,val):
+def edit_msg_map(model,dest,vals):
     item = getattr(model,dest)
     item.clear()
     for k,v in vals.items():

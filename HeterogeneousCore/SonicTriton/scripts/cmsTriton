@@ -429,6 +429,10 @@ list_models(){
 		if [ -f "$MODEL" ]; then
 			MODEL="$(dirname "$MODEL")"
 		fi
+
+		# if we copy/alter the config, set this to true
+		copied=false
+
 		if [ -n "$THREADCONTROL" ]; then
 			$DRYRUN cmsTritonConfigTool threadcontrol -c ${MODEL}/config.pbtxt --copy $TMPDIR/$LOCALMODELREPO --nThreads $INSTANCES
 			TOOL_EXIT=$?
@@ -436,7 +440,10 @@ list_models(){
 				echo "Could not apply threadcontrol to $MODEL"
 				exit "$TOOL_EXIT"
 			fi
-		elif [ -z "$CLEANUP" ]; then # if not cleaning up, we are debugging
+			copied=true
+		fi
+		
+		if [ -z "$CLEANUP" ]; then # if not cleaning up, we are debugging
 			# Allowed values of "string_value" are "always" or "on_failure"
 			$DRYRUN cmsTritonConfigTool edit -c ${MODEL}/config.pbtxt --copy $TMPDIR/$LOCALMODELREPO \
 				--platform "" --backend "python" --parameters dump_input '{"string_value":"always"}'
@@ -445,7 +452,10 @@ list_models(){
 				echo "Could not apply debug configuration to $MODEL"
 				exit "$TOOL_EXIT"
 			fi
-		else
+			copied=true
+		fi
+		
+		if [ "$copied" = false ]; then
 			REPOS+=("$(dirname "$MODEL")")
 		fi
 	done

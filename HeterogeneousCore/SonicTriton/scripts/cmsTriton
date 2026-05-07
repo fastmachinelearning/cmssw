@@ -693,7 +693,7 @@ elif [ "$OP" == start ]; then
 		make_tmp
 
 		# if we plan on editing model configs, must copy files into /tmp/local_model_repo, which is deleted upon retry
-		if [ "$counter" -eq 0 ] || [ -n "$THREADCONTROL" ]; then list_models; fi
+		if [ "$counter" -eq 0 ] || [ -n "$THREADCONTROL" ] || [ -z $ClEANUP ]; then list_models; fi
 
 		# only need to check drivers if using GPU
 		if [ "$DEVICE" == gpu ]; then

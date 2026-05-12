@@ -157,6 +157,16 @@ else
 	TMPDIR=$(readlink -f $TMPDIR)
 fi
 
+# Create directory for input dumps if debugging
+if [ -z "$CLEANUP" ]; then
+	$DRYRUN mkdir -p "$TMPDIR/dumps"
+	MKDUMPDIR_EXIT=$?
+	if [ "$MKDUMPDIR_EXIT" -ne 0 ]; then
+		echo "Could not create input dump dir: $TMPDIR/dumps"
+		exit "$MKDUMPDIR_EXIT"
+	fi
+fi
+
 # update path
 if [ -n "$EXTRAPATH" ]; then
 	export PATH="${EXTRAPATH}:${PATH}"
@@ -261,6 +271,11 @@ start_docker(){
 		ADDARGS="-p 127.0.0.1:${HTTPPORT}:${HTTPPORT} -p 127.0.0.1:${GRPCPORT}:${GRPCPORT} -p 127.0.0.1:${METRPORT}:${METRPORT}"
 	fi
 
+	# mount dump directory if debugging
+	if [ -z "$CLEANUP" ]; then
+		MOUNTARGS="$MOUNTARGS -v$TMPDIR/dumps:/dumps"
+	fi
+
 	# compatibility driver environment
 	if [ -n "$COMPAT" ]; then
 		MOUNTARGS="$MOUNTARGS -v$COMPAT"
@@ -287,6 +302,11 @@ start_podman(){
 		ADDARGS="-p 127.0.0.1:${HTTPPORT}:${HTTPPORT} -p 127.0.0.1:${GRPCPORT}:${GRPCPORT} -p 127.0.0.1:${METRPORT}:${METRPORT}"
 	fi
 
+	# mount dump directory if debugging
+	if [ -z "$CLEANUP" ]; then
+		MOUNTARGS="$MOUNTARGS --volume $TMPDIR/dumps:/dumps"
+	fi
+
 	# compatibility driver environment
 	if [ -n "$COMPAT" ]; then
 		MOUNTARGS="$MOUNTARGS --volume $COMPAT"
@@ -311,6 +331,11 @@ start_apptainer(){
 	ADDRARGS=""
 	if [ -z "$GLOBALCONNECT" ]; then
 		ADDRARGS="--http-address=127.0.01 --grpc-address=127.0.0.1 --metrics-address=127.0.0.1"
+	fi
+
+	# mount dump directory if debugging
+	if [ -z "$CLEANUP" ]; then
+		MOUNTARGS="$MOUNTARGS -B $TMPDIR/dumps:/dumps"
 	fi
 
 	# compatibility driver environment

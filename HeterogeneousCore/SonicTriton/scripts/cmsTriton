@@ -443,10 +443,10 @@ list_models(){
 			copied=true
 		fi
 		
-		if [ -z "$CLEANUP" ]; then # if not cleaning up, we are debugging
-			# Allowed values of "string_value" are "always" or "on_failure"
-			$DRYRUN cmsTritonConfigTool edit -c ${MODEL}/config.pbtxt --copy $TMPDIR/$LOCALMODELREPO \
-				--platform "" --backend "python" --parameters dump_input '{"string_value":"always"}'
+		# if not cleaning up, we are debugging
+		if [ -z "$CLEANUP" ]; then 
+			# Omit the `--dump-always` flag to only dump input tensors on inference failure
+			$DRYRUN cmsTritonConfigTool debug -c ${MODEL}/config.pbtxt --copy $TMPDIR/$LOCALMODELREPO --dump-always
 			TOOL_EXIT=$?
 			if [ "$TOOL_EXIT" -ne 0 ]; then
 				echo "Could not apply debug configuration to $MODEL"

@@ -408,16 +408,24 @@ def cfg_debug(args):
     # Assuming there's only version "1" of the model...
     shutil.copy(args.script, os.path.join(new_config_dir, "1", "model.py"))
 
-    dump_param_value = "always" if args.dump_always else "failure"
+    dump_param_value = "always" if args.dump_always else "on_failure"
     edit_args = Namespace(
         platform = "",
         backend = "python",
         parameters = {"dump_input": {"string_value": dump_param_value}}
     )
 
-    for dest,editor,val in [(dest,editor,getattr(edit_args,dest)) for dest,editor in args.edit_dests.items() if getattr(edit_args,dest) is not None]:
-        editor(args.model,dest,val)
+    for dest, editor in args.edit_dests.items():
+        # Custom namespace doesn't have attributes for all editable fields
+        try:
+            val = getattr(edit_args, dest)
+        except AttributeError:
+            continue
+        
+        if val is not None:
+            editor(args.model,dest,val)
 
+    args.copy = new_config_dir
     update_config(args)
 
     # can't do viewing - print_fields breaks on `parameters` MessageMapContainer

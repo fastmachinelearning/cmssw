@@ -7,9 +7,6 @@ import shlex
 import uuid
 import traceback
 import pickle
-
-# These are not part of standard library, are they available
-# in a CMSSW Python environment?
 import numpy as np
 from tritonclient import grpc as grpcclient
 from tritonclient import utils as tcutils

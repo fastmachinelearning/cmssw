@@ -157,16 +157,6 @@ else
 	TMPDIR=$(readlink -f $TMPDIR)
 fi
 
-# Create directory for input dumps if debugging
-if [ -z "$CLEANUP" ]; then
-	$DRYRUN mkdir -p "$TMPDIR/dumps"
-	MKDUMPDIR_EXIT=$?
-	if [ "$MKDUMPDIR_EXIT" -ne 0 ]; then
-		echo "Could not create input dump dir: $TMPDIR/dumps"
-		exit "$MKDUMPDIR_EXIT"
-	fi
-fi
-
 # update path
 if [ -n "$EXTRAPATH" ]; then
 	export PATH="${EXTRAPATH}:${PATH}"
@@ -552,6 +542,17 @@ make_tmp(){
 		echo "Could not create temp dir: $TMPDIR"
 		exit "$MKDIR_EXIT"
 	fi
+
+	# Create directory for input dumps if debugging
+	if [ -z $CLEANUP ]; then
+		$DRYRUN mkdir "$TMPDIR/dumps"
+		DUMPDIR_EXIT=$?
+		if [ "$DUMPDIR_EXIT" -ne 0 ]; then
+			echo "Could not create dumps dir: $TMPDIR/dumps"
+			exit "$DUMPDIR_EXIT"
+		fi
+	fi
+
 	$DRYRUN cd "$TMPDIR"
 }
 

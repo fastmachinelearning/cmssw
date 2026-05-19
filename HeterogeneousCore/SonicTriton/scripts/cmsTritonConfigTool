@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os, sys, json, pathlib, shutil
+from FWCore.ParameterSet.pfnInPath import pfnInPath
 from collections import OrderedDict
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, RawTextHelpFormatter, RawDescriptionHelpFormatter, Action, Namespace
 from enum import Enum
@@ -405,8 +406,8 @@ def cfg_debug(args):
     # Detect onnx or pytorch model and copy appropriate script.
     # Assumes exactly one file per model version directory.
     model_scripts = {
-        "onnx": "/depot/cms/users/colberte/SONIC/sonic-inference-replay/model_prep/onnx_model.py",
-        "torch": "/depot/cms/users/colberte/SONIC/sonic-inference-replay/model_prep/torch_model.py",
+        "onnx": pfnInPath("onnx_model.py").split(":")[-1],
+        "torch": pfnInPath("torch_model.py").split(":")[-1],
     }
     for model_version in [str(p.resolve()) for p in pathlib.Path(new_config_dir).iterdir() if p.is_dir()]:
         model_file = os.listdir(model_version)[0]

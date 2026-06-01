@@ -378,5 +378,7 @@ class TritonReplayREPL(cmd.Cmd):
         return model_name, input_shapes
 
 if (__name__ == "__main__"):
+    # TODO: add capability to start triton server before REPL
+
     repl = TritonReplayREPL()
     repl.cmdloop()

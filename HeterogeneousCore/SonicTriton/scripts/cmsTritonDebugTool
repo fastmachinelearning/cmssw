@@ -7,6 +7,8 @@ import shlex
 import uuid
 import traceback
 import pickle
+import argparse
+import subprocess
 import numpy as np
 from tritonclient import grpc as grpcclient
 from tritonclient import utils as tcutils
@@ -378,7 +380,33 @@ class TritonReplayREPL(cmd.Cmd):
         return model_name, input_shapes
 
 if (__name__ == "__main__"):
-    # TODO: add capability to start triton server before REPL
+    parser = argparse.ArgumentParser(description="SONIC debugging interface - a simple REPL for replaying Triton inference requests")
+    parser.add_argument("--dump-dir", type=str, default=None, help="Directory for input dumps")
+    # TODO: add arg for model name(s)
+    args = parser.parse_args()
+
+    if (args.dump_dir is None):
+        args.dump_dir = os.path.join(os.pwd(), ".triton_replay")
+    os.makedirs(args.dump_dir, exist_ok=True)
+
+    triton_command = [
+        "cmsTriton", "-f", "-c",
+        "-m", "/uscms_data/d1/ecolbert/sonic/sonic-models/models/particlenet_AK4_PT",
+        "-t", args.dump_dir,
+        "-s", "/uscms_data/d1/ecolbert/sonic/triton_python_cuda.sif",
+        "start"
+    ]
+
+    # add variable to CMSSW search path for the extra scripts -- should be needed only for testing
+    cmd_env = dict(os.environ)
+    current_search_path = cmd_env["CMSSW_SEARCH_PATH"]
+    cmd_env["CMSSW_SEARCH_PATH"] = "{}:/uscms_data/d1/ecolbert/sonic/sonic-inference-replay/model_prep".format(current_search_path)
+
+    model_start_result = subprocess.run(triton_command, shell=True, capture_output=True, text=True, env=cmd_env)
+    if (model_start_result.returncode != 0):
+        print("Failed to start local Triton server. Error: {}".format(model_start_result.stderr))
+        os.exit(model_start_result.returncode)
+    print("Started local Triton server. Connecting.")
 
     repl = TritonReplayREPL()
     repl.cmdloop()

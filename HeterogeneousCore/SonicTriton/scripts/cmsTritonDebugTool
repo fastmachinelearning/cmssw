@@ -382,23 +382,25 @@ class TritonReplayREPL(cmd.Cmd):
 
 if (__name__ == "__main__"):
     parser = argparse.ArgumentParser(description="SONIC debugging interface - a simple REPL for replaying Triton inference requests")
-    parser.add_argument("--dump-dir", type=str, default=None, help="Directory for input dumps")
-    # TODO: add arg for model name(s)
+    parser.add_argument("--working-dir", type=str, default=None, help="Working directory for Triton server (default: ./.triton_replay)")
+    parser.add_argument("--models", type=str, nargs="+", default=["particlenet_AK4_PT"], help="Names of model(s) to load (default: particlenet_AK4_PT)")
     args = parser.parse_args()
 
-    if (args.dump_dir is None):
-        args.dump_dir = os.path.join(os.pwd(), ".triton_replay")
+    if (args.working_dir is None):
+        args.working_dir = os.path.join(os.pwd(), ".triton_replay")
 
+    # TODO: remove hard-coded paths
+    model_args_list = ["-m /uscms_data/d1/ecolbert/sonic/sonic-models/models/{}".format(model) for model in args.models]
     triton_command_list = [
         "cmsTriton", "-f", "-c",
-        "-m", "/uscms_data/d1/ecolbert/sonic/sonic-models/models/particlenet_AK4_PT",
-        "-t", args.dump_dir,
+        " ".join(model_args_list),
+        "-t", args.working_dir,
         "-s", "/uscms_data/d1/ecolbert/sonic/triton_python_cuda.sif",
         "start"
     ]
     triton_command = " ".join(triton_command_list)
 
-    # add variable to CMSSW search path for the extra scripts -- should be needed only for testing
+    # add variable to CMSSW search path for the extra scripts -- should be needed only for testing. TODO: remove
     cmd_env = dict(os.environ)
     current_search_path = cmd_env["CMSSW_SEARCH_PATH"]
     cmd_env["CMSSW_SEARCH_PATH"] = "{}:/uscms_data/d1/ecolbert/sonic/sonic-inference-replay/model_prep".format(current_search_path)
@@ -410,7 +412,7 @@ if (__name__ == "__main__"):
     print("Started local Triton server. Connecting.")
 
     repl = TritonReplayREPL()
-    repl.do_set_dump_dir("{}/dumps".format(args.dump_dir))
+    repl.do_set_dump_dir("{}/dumps".format(args.working_dir))
 
     repl.cmdloop()
 

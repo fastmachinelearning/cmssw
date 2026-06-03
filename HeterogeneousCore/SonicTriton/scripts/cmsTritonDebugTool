@@ -213,7 +213,7 @@ class TritonReplayREPL(cmd.Cmd):
             size = os.path.getsize(filepath)
             print(f"  {f} ({size} bytes)")
 
-    def do_get_models(self, arg):
+    def do_list_models(self, arg):
         """Print model repository index from the Triton server."""
         if self.client is None:
             print("✗ Not connected to Triton server. Cannot list models.")
@@ -388,17 +388,15 @@ if (__name__ == "__main__"):
 
     if (args.dump_dir is None):
         args.dump_dir = os.path.join(os.pwd(), ".triton_replay")
-    # os.makedirs(args.dump_dir, exist_ok=True)
 
-    # TODO: something's going wrong passing the command to subprocess - cmsTriton isn't running properly
-
-    triton_command = [
+    triton_command_list = [
         "cmsTriton", "-f", "-c",
         "-m", "/uscms_data/d1/ecolbert/sonic/sonic-models/models/particlenet_AK4_PT",
         "-t", args.dump_dir,
         "-s", "/uscms_data/d1/ecolbert/sonic/triton_python_cuda.sif",
         "start"
     ]
+    triton_command = " ".join(triton_command_list)
 
     # add variable to CMSSW search path for the extra scripts -- should be needed only for testing
     cmd_env = dict(os.environ)
@@ -412,4 +410,7 @@ if (__name__ == "__main__"):
     print("Started local Triton server. Connecting.")
 
     repl = TritonReplayREPL()
+    repl.do_set_dump_dir("{}/dumps".format(args.dump_dir))
+
     repl.cmdloop()
+

@@ -400,11 +400,6 @@ if (__name__ == "__main__"):
     ]
     triton_command = " ".join(triton_command_list)
 
-    # add variable to CMSSW search path for the extra scripts -- should be needed only for testing. TODO: remove
-    cmd_env = dict(os.environ)
-    current_search_path = cmd_env["CMSSW_SEARCH_PATH"]
-    cmd_env["CMSSW_SEARCH_PATH"] = "{}:/uscms_data/d1/ecolbert/sonic/sonic-inference-replay/model_prep".format(current_search_path)
-
     model_start_result = subprocess.run(triton_command, shell=True, capture_output=True, text=True, env=cmd_env)
     if (model_start_result.returncode != 0):
         print("Failed to start local Triton server. Error: {}".format(model_start_result.stdout))
@@ -415,4 +410,3 @@ if (__name__ == "__main__"):
     repl.do_set_dump_dir("{}/dumps".format(args.working_dir))
 
     repl.cmdloop()
-

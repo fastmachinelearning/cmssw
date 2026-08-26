@@ -406,8 +406,8 @@ def cfg_debug(args):
     # Detect onnx or pytorch model and copy appropriate script.
     # Assumes exactly one file per model version directory.
     model_scripts = {
-        "onnx": pfnInPath("onnx_model.py").split(":")[-1],
-        "torch": pfnInPath("torch_model.py").split(":")[-1],
+        "onnx": pfnInPath("HeterogeneousCore/SonicTriton/python/onnx_model.py").split(":")[-1],
+        "torch": pfnInPath("HeterogeneousCore/SonicTriton/python/torch_model.py").split(":")[-1],
     }
     for model_version in [str(p.resolve()) for p in pathlib.Path(new_config_dir).iterdir() if p.is_dir()]:
         model_file = os.listdir(model_version)[0]

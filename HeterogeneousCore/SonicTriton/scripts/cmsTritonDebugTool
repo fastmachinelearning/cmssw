@@ -400,7 +400,7 @@ if (__name__ == "__main__"):
     ]
     triton_command = " ".join(triton_command_list)
 
-    model_start_result = subprocess.run(triton_command, shell=True, capture_output=True, text=True, env=cmd_env)
+    model_start_result = subprocess.run(triton_command, shell=True, capture_output=True, text=True)
     if (model_start_result.returncode != 0):
         print("Failed to start local Triton server. Error: {}".format(model_start_result.stdout))
         sys.exit(model_start_result.returncode)

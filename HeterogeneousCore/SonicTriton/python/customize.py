@@ -21,6 +21,7 @@ def getParser():
     parser.add_argument("--params", default="", type=str, help="json file containing server address/port")
     parser.add_argument("--threads", default=1, type=int, help="number of threads")
     parser.add_argument("--streams", default=0, type=int, help="number of streams")
+    parser.add_argument("--debug", default=False, action="store_true", help="enable debug operation for fallback server")
     parser.add_argument("--verbose", default=False, action="store_true", help="enable all verbose output")
     parser.add_argument("--verboseClient", default=False, action="store_true", help="enable verbose output for clients")
     parser.add_argument("--verboseServer", default=False, action="store_true", help="enable verbose output for server")
@@ -73,6 +74,7 @@ def applyOptions(process, options, applyToModules=False):
         process.TritonService.fallback.imageName = options.imageName
         process.TritonService.fallback.sandboxDir = options.sandboxDir
         process.TritonService.fallback.tempDir = options.tempDir
+        process.TritonService.fallback.debug = options.debug
         process.TritonService.fallback.device = options.device
         if len(options.fallbackName)>0:
             process.TritonService.fallback.instanceBaseName = options.fallbackName

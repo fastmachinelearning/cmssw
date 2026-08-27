@@ -1,0 +1,412 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import cmd
+import ast
+import shlex
+import uuid
+import traceback
+import pickle
+import argparse
+import subprocess
+import numpy as np
+from tritonclient import grpc as grpcclient
+from tritonclient import utils as tcutils
+
+class TritonReplayREPL(cmd.Cmd):
+    """REPL for replaying Triton inference requests from pickled dumps."""
+    
+    intro = "Triton Replay REPL - Type 'help' for available commands."
+    prompt = "triton> "
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.dump_dir = os.path.join(os.path.dirname(__file__), "..", "replay_dumps")
+        self.last_request_id = None
+        self.rng = np.random.default_rng()
+
+        self.client = None
+        self._connect_client()
+    
+    def do_replay(self, arg):
+        """Replay an inference request from a pickled dump. Usage: replay <filename>"""
+        if not arg:
+            print("Usage: replay <filename>")
+            return
+        
+        if self.client is None:
+            print("✗ Not connected to Triton server. Cannot replay.")
+            return
+        
+        filename = arg.strip()
+        filepath = os.path.join(self.dump_dir, filename)
+        
+        # Add .pkl extension if not present
+        if not filepath.endswith('.pkl'):
+            filepath += '.pkl'
+        
+        if not os.path.isfile(filepath):
+            print(f"✗ File not found: {filepath}")
+            return
+        
+        try:
+            # Load the pickled data
+            with open(filepath, 'rb') as f:
+                data = pickle.load(f)
+            
+            print(f"✓ Loaded dump: {os.path.basename(filepath)}")
+            
+            # Send inference request
+            self.last_request_id = self._send_inference(data["inputs"], data["model"])
+            
+        except Exception as e:
+            print(f"✗ Error loading or replaying dump: {e}")
+            traceback.print_exc()
+    
+    def do_request_random(self, arg):
+        """Send random inference input. Usage: request_random <model_name> <input_name> <shape> [<input_name> <shape> ...]"""
+        if self.client is None:
+            print("✗ Not connected to Triton server. Cannot send request.")
+            return
+
+        try:
+            model_name, input_shapes = self._parse_random_request_args(arg)
+        except ValueError as e:
+            print(f"✗ Invalid input: {e}")
+            return
+
+        try:
+            model_config = self.client.get_model_config(model_name)
+            model_inputs = model_config.config.input
+            model_input_names = [inp.name for inp in model_inputs]
+
+            provided_names = set(input_shapes.keys())
+            expected_names = set(model_input_names)
+            missing = sorted(expected_names - provided_names)
+            unexpected = sorted(provided_names - expected_names)
+
+            if missing:
+                print(f"✗ Missing shapes for model inputs: {', '.join(missing)}")
+                return
+            if unexpected:
+                print(f"✗ Unexpected inputs for model '{model_name}': {', '.join(unexpected)}")
+                return
+
+            random_inputs = {}
+            for inp in model_inputs:
+                triton_dtype = grpcclient.model_config_pb2.DataType.Name(inp.data_type)
+                if triton_dtype.startswith("TYPE_"):
+                    triton_dtype = triton_dtype[5:]
+
+                try:
+                    np_dtype = tcutils.triton_to_np_dtype(triton_dtype)
+                except Exception:
+                    np_dtype = np.float32
+
+                shape = input_shapes[inp.name]
+                if np.issubdtype(np_dtype, np.floating):
+                    values = self.rng.random(shape, dtype=np.float32).astype(np_dtype, copy=False)
+                elif np.issubdtype(np_dtype, np.integer):
+                    values = self.rng.integers(0, 10, size=shape, dtype=np_dtype)
+                elif np.issubdtype(np_dtype, np.bool_):
+                    values = self.rng.integers(0, 2, size=shape, dtype=np.int8).astype(np.bool_)
+                else:
+                    values = self.rng.random(shape, dtype=np.float32)
+
+                random_inputs[inp.name] = values
+
+            self.last_request_id = self._send_inference(random_inputs, model_name)
+
+        except Exception as e:
+            print(f"✗ Error creating or sending random request: {e}")
+            traceback.print_exc()
+
+    def do_inspect_dump(self, arg):
+        """Get information from an input dump. Usage: inspect_dump <filename>"""
+        if not arg:
+            print("Usage: inspect_dump <filename>")
+            return
+        
+        filename = arg.strip()
+        filepath = os.path.join(self.dump_dir, filename)
+
+        if not filepath.endswith('.pkl'):
+            filepath += '.pkl'
+        
+        if not os.path.isfile(filepath):
+            print(f"✗ File not found: {filepath}")
+            return
+        
+        try:
+            with open(filepath, 'rb') as f:
+                dump = pickle.load(f)
+            
+            print(f"✓ Loaded dump: {os.path.basename(filepath)}\n")
+
+            print(f"Request id: {dump.get('id', 'MISSING')}")
+            print(f"Model name: {dump.get('model', 'MISSING')}")
+            print(f"Error message: {dump.get('message', 'none')}")
+
+            dump_inputs = dump.get('inputs', {})
+            if len(dump_inputs) == 0:
+                print("No input tensors found!")
+            else:
+                print("Input information:")
+                for name, val in dump_inputs.items():
+                    print(f"  Input {name}: shape: {val.shape}, dtype: {val.dtype}")
+                print() # extra newline
+        
+        except Exception as e:
+            print(f"✗ Error loading dump: {e}")
+            traceback.print_exc()
+            return
+
+    def do_get_model_info(self, arg):
+        """Get model input/output information. Usage: get_model_info <model_name>"""
+        if self.client is None:
+            print("✗ Not connected to Triton server. Cannot get model info.")
+            return
+        
+        model_name = arg.strip()
+        if not model_name:
+            print("Usage: get_model_info <model_name>")
+            return
+        
+        try:
+            model_config = self.client.get_model_config(model_name)
+            print(f"Model '{model_name}' configuration:")
+            print(model_config)
+        except Exception as e:
+            print(f"✗ Error retrieving model info for '{model_name}': {e}")
+            traceback.print_exc()
+
+    def do_set_dump_dir(self, arg):
+        """Set the dumps directory. Usage: set_dump_dir <path>"""
+        if not arg:
+            print("Usage: set_dump_dir <path>")
+            return
+        
+        arg = arg.strip()
+        if not os.path.isdir(arg):
+            print(f"✗ Directory does not exist: {arg}")
+            return
+        
+        self.dump_dir = arg
+        print(f"✓ Dumps directory set to: {self.dump_dir}")
+
+    def do_list_dumps(self, arg):
+        """List available dump files in the current dumps directory."""
+        if not os.path.isdir(self.dump_dir):
+            print(f"✗ Dumps directory not found: {self.dump_dir}")
+            return
+        
+        files = [f for f in os.listdir(self.dump_dir) if f.endswith('.pkl')]
+        
+        if not files:
+            print(f"No dump files found in {self.dump_dir}")
+            return
+        
+        print(f"✓ Dump files in {self.dump_dir}:")
+        for f in sorted(files):
+            filepath = os.path.join(self.dump_dir, f)
+            size = os.path.getsize(filepath)
+            print(f"  {f} ({size} bytes)")
+
+    def do_list_models(self, arg):
+        """Print model repository index from the Triton server."""
+        if self.client is None:
+            print("✗ Not connected to Triton server. Cannot list models.")
+            return
+        
+        try:
+            models = self.client.get_model_repository_index()
+            if not models:
+                print("No models found on the Triton server.")
+                return
+
+            print(models)
+            
+        except Exception as e:
+            print(f"✗ Error printing models: {e}")
+            traceback.print_exc()
+
+    def do_last_request(self, arg):
+        """Show the last request ID sent to Triton."""
+        if self.last_request_id:
+            print(f"Last request ID: {self.last_request_id}")
+        else:
+            print("No requests have been sent yet.")
+    
+    def do_status(self, arg):
+        """Show current status and configuration."""
+        print("Current Configuration:")
+        print(f"  Dumps directory: {self.dump_dir}")
+        if self.client:
+            try:
+                server_live = self.client.is_server_live()
+                server_ready = self.client.is_server_ready()
+                print(f"  Triton server: Connected (live={server_live}, ready={server_ready})")
+            except Exception as e:
+                print(f"  Triton server: Connection error: {e}")
+        else:
+            print(f"  Triton server: Not connected")
+        
+        if self.last_request_id:
+            print(f"  Last request ID: {self.last_request_id}")
+        else:
+            print("  No requests have been sent yet.")
+    
+    def do_reconnect(self, arg):
+        """Reconnect to the Triton server."""
+        self._connect_client()
+    
+    def do_quit(self, arg):
+        """Quit the REPL."""
+        if self.client:
+            self.client.close()
+            self.client = None
+        print("Goodbye!")
+        return True
+    
+    def do_exit(self, arg):
+        """Exit the REPL."""
+        return self.do_quit(arg)
+    
+    def do_EOF(self, arg):
+        """Handle EOF (Ctrl+D)."""
+        print()
+        return self.do_quit(arg)
+    
+    def emptyline(self):
+        """Do nothing on empty input."""
+        pass
+
+    def _connect_client(self):
+        """Connect to the Triton server."""
+        if self.client:
+            self.client.close()
+            self.client = None
+
+        try:
+            self.client = grpcclient.InferenceServerClient("localhost:8001")
+            print(f"✓ Connected to Triton server at localhost:8001")
+        except Exception as e:
+            print(f"✗ Failed to connect to Triton server: {e}")
+            self.client = None
+    
+    def _send_inference(self, data, model_name, req_id=None):
+        """Send inference request to Triton with the loaded data."""
+
+        input_names, output_names = self._get_model_io(self.client.get_model_config(model_name))
+
+        # Create Triton inputs for given data
+        inputs = []
+        for name in input_names:
+            tensor_data = data[name]
+            triton_dtype = tcutils.np_to_triton_dtype(tensor_data.dtype)
+            inputs.append(grpcclient.InferInput(name, tensor_data.shape, triton_dtype))
+            inputs[-1].set_data_from_numpy(tensor_data)
+
+        outputs = [grpcclient.InferRequestedOutput(name) for name in output_names]
+        
+        if (req_id is None):
+            req_id = str(uuid.uuid4())
+        
+        print(f"✓ Sending inference request with id: {req_id}")
+        try:
+            result = self.client.infer(model_name, inputs, outputs=outputs, request_id=req_id)
+            print(f"✓ Inference successful for request id: {req_id}")
+            for out in output_names:
+                output_data = result.as_numpy(out)
+                print(f"Output '{out}': shape={output_data.shape}, dtype={output_data.dtype}")
+        
+        except Exception as e:
+            print(f"✗ Inference failed for request id: {req_id} with error: {e}")
+            traceback.print_exc()
+        
+        return req_id
+
+    def _get_model_io(self, model_config):
+        """Extract input and output names and dtypes from model config."""
+        input_names = [inp.name for inp in model_config.config.input]
+        output_names = [out.name for out in model_config.config.output]
+        return input_names, output_names
+    
+    def _parse_random_request_args(self, arg):
+        """Parse request_random args into model name and {input_name: shape_tuple}."""
+        if not arg or not arg.strip():
+            raise ValueError(
+                "Usage: request_random <model_name> <input_name> <shape> [<input_name> <shape> ...]"
+            )
+
+        tokens = shlex.split(arg)
+        if len(tokens) < 3:
+            raise ValueError(
+                "Usage: request_random <model_name> <input_name> <shape> [<input_name> <shape> ...]"
+            )
+        if (len(tokens) - 1) % 2 != 0:
+            raise ValueError(
+                "Input arguments must be provided as <input_name> <shape> pairs."
+            )
+
+        model_name = tokens[0]
+        input_shapes = {}
+
+        for i in range(1, len(tokens), 2):
+            input_name = tokens[i]
+            shape_str = tokens[i + 1]
+
+            try:
+                parsed_shape = ast.literal_eval(shape_str)
+            except Exception as e:
+                raise ValueError(f"Invalid shape for input '{input_name}': {shape_str}") from e
+
+            if isinstance(parsed_shape, int):
+                shape = (parsed_shape,)
+            elif isinstance(parsed_shape, (tuple, list)):
+                shape = tuple(parsed_shape)
+            else:
+                raise ValueError(
+                    f"Shape for input '{input_name}' must be an int, tuple, or list."
+                )
+
+            if any((not isinstance(dim, int)) or dim < 0 for dim in shape):
+                raise ValueError(
+                    f"Shape for input '{input_name}' must contain only non-negative integers."
+                )
+
+            input_shapes[input_name] = shape
+
+        return model_name, input_shapes
+
+if (__name__ == "__main__"):
+    parser = argparse.ArgumentParser(description="SONIC debugging interface - a simple REPL for replaying Triton inference requests")
+    parser.add_argument("--working-dir", type=str, default=None, help="Working directory for Triton server (default: ./.triton_replay)")
+    parser.add_argument("--models", type=str, nargs="+", default=["particlenet_AK4_PT"], help="Names of model(s) to load (default: particlenet_AK4_PT)")
+    args = parser.parse_args()
+
+    if (args.working_dir is None):
+        args.working_dir = os.path.join(os.pwd(), ".triton_replay")
+
+    # TODO: remove hard-coded paths
+    model_args_list = ["-m /uscms_data/d1/ecolbert/sonic/sonic-models/models/{}".format(model) for model in args.models]
+    triton_command_list = [
+        "cmsTriton", "-f", "-c",
+        " ".join(model_args_list),
+        "-t", args.working_dir,
+        "-s", "/uscms_data/d1/ecolbert/sonic/triton_python_cuda.sif",
+        "start"
+    ]
+    triton_command = " ".join(triton_command_list)
+
+    model_start_result = subprocess.run(triton_command, shell=True, capture_output=True, text=True)
+    if (model_start_result.returncode != 0):
+        print("Failed to start local Triton server. Error: {}".format(model_start_result.stdout))
+        sys.exit(model_start_result.returncode)
+    print("Started local Triton server. Connecting.")
+
+    repl = TritonReplayREPL()
+    repl.do_set_dump_dir("{}/dumps".format(args.working_dir))
+
+    repl.cmdloop()

@@ -261,6 +261,11 @@ start_docker(){
 		ADDARGS="-p 127.0.0.1:${HTTPPORT}:${HTTPPORT} -p 127.0.0.1:${GRPCPORT}:${GRPCPORT} -p 127.0.0.1:${METRPORT}:${METRPORT}"
 	fi
 
+	# mount dump directory if debugging
+	if [ -z "$CLEANUP" ]; then
+		MOUNTARGS="$MOUNTARGS -v$TMPDIR/dumps:/dumps"
+	fi
+
 	# compatibility driver environment
 	if [ -n "$COMPAT" ]; then
 		MOUNTARGS="$MOUNTARGS -v$COMPAT"
@@ -287,6 +292,11 @@ start_podman(){
 		ADDARGS="-p 127.0.0.1:${HTTPPORT}:${HTTPPORT} -p 127.0.0.1:${GRPCPORT}:${GRPCPORT} -p 127.0.0.1:${METRPORT}:${METRPORT}"
 	fi
 
+	# mount dump directory if debugging
+	if [ -z "$CLEANUP" ]; then
+		MOUNTARGS="$MOUNTARGS --volume $TMPDIR/dumps:/dumps"
+	fi
+
 	# compatibility driver environment
 	if [ -n "$COMPAT" ]; then
 		MOUNTARGS="$MOUNTARGS --volume $COMPAT"
@@ -311,6 +321,11 @@ start_apptainer(){
 	ADDRARGS=""
 	if [ -z "$GLOBALCONNECT" ]; then
 		ADDRARGS="--http-address=127.0.01 --grpc-address=127.0.0.1 --metrics-address=127.0.0.1"
+	fi
+
+	# mount dump directory if debugging
+	if [ -z "$CLEANUP" ]; then
+		MOUNTARGS="$MOUNTARGS -B $TMPDIR/dumps:/dumps"
 	fi
 
 	# compatibility driver environment
@@ -411,7 +426,7 @@ wait_server(){
 list_models(){
 	# make list of model repositories
 	LOCALMODELREPO="local_model_repo"
-	if [ -n "$THREADCONTROL" ]; then
+	if [ -n "$THREADCONTROL" ] || [ -z "$CLEANUP" ]; then
 		if [ -d "$TMPDIR/$LOCALMODELREPO" ]; then
 			#Want to start with a fresh copy of model files in case this directory already exists with local edits
 			rm -rf $TMPDIR/$LOCALMODELREPO
@@ -429,6 +444,10 @@ list_models(){
 		if [ -f "$MODEL" ]; then
 			MODEL="$(dirname "$MODEL")"
 		fi
+
+		# if we copy/alter the config, set this to true
+		copied=false
+
 		if [ -n "$THREADCONTROL" ]; then
 			$DRYRUN cmsTritonConfigTool threadcontrol -c ${MODEL}/config.pbtxt --copy $TMPDIR/$LOCALMODELREPO --nThreads $INSTANCES
 			TOOL_EXIT=$?
@@ -436,11 +455,26 @@ list_models(){
 				echo "Could not apply threadcontrol to $MODEL"
 				exit "$TOOL_EXIT"
 			fi
-		else
+			copied=true
+		fi
+		
+		# if not cleaning up, we are debugging
+		if [ -z "$CLEANUP" ]; then 
+			# Omit the `--dump-always` flag to only dump input tensors on inference failure
+			$DRYRUN cmsTritonConfigTool debug -c ${MODEL}/config.pbtxt --copy $TMPDIR/$LOCALMODELREPO --dump-always
+			TOOL_EXIT=$?
+			if [ "$TOOL_EXIT" -ne 0 ]; then
+				echo "Could not apply debug configuration to $MODEL"
+				exit "$TOOL_EXIT"
+			fi
+			copied=true
+		fi
+		
+		if [ "$copied" = false ]; then
 			REPOS+=("$(dirname "$MODEL")")
 		fi
 	done
-	if [ -n "$THREADCONTROL" ]; then
+	if [ -n "$THREADCONTROL" ] || [ -z "$CLEANUP" ]; then
 		REPOS=$TMPDIR/$LOCALMODELREPO
 	else
 		for ((r=0; r < ${#REPOS[@]}; r++)); do
@@ -508,6 +542,17 @@ make_tmp(){
 		echo "Could not create temp dir: $TMPDIR"
 		exit "$MKDIR_EXIT"
 	fi
+
+	# Create directory for input dumps if debugging
+	if [ -z $CLEANUP ]; then
+		$DRYRUN mkdir "$TMPDIR/dumps"
+		DUMPDIR_EXIT=$?
+		if [ "$DUMPDIR_EXIT" -ne 0 ]; then
+			echo "Could not create dumps dir: $TMPDIR/dumps"
+			exit "$DUMPDIR_EXIT"
+		fi
+	fi
+
 	$DRYRUN cd "$TMPDIR"
 }
 
@@ -684,7 +729,7 @@ elif [ "$OP" == start ]; then
 		make_tmp
 
 		# if we plan on editing model configs, must copy files into /tmp/local_model_repo, which is deleted upon retry
-		if [ "$counter" -eq 0 ] || [ -n "$THREADCONTROL" ]; then list_models; fi
+		if [ "$counter" -eq 0 ] || [ -n "$THREADCONTROL" ] || [ -z $ClEANUP ]; then list_models; fi
 
 		# only need to check drivers if using GPU
 		if [ "$DEVICE" == gpu ]; then

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os, sys, json, pathlib, shutil
+from FWCore.ParameterSet.pfnInPath import pfnInPath
 from collections import OrderedDict
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, RawTextHelpFormatter, RawDescriptionHelpFormatter, Action, Namespace
 from enum import Enum
@@ -148,14 +149,14 @@ def edit_msg(model,dest,val):
     item = getattr(model,dest)
     json_format.ParseDict(val,item)
 
-def edit_msg_list(model,dest,val):
+def edit_msg_list(model,dest,vals):
     item = getattr(model,dest)
     item.clear()
     for v in vals:
         m = item.add()
         json_format.ParseDict(v,m)
 
-def edit_msg_map(model,dest,val):
+def edit_msg_map(model,dest,vals):
     item = getattr(model,dest)
     item.clear()
     for k,v in vals.items():
@@ -395,6 +396,52 @@ def cfg_threadcontrol(args):
     if args.view:
         cfg_view(args)
 
+def cfg_debug(args):
+    # copy the entire model, not just config.pbtxt
+    config_dir = os.path.dirname(args.config)
+    copy_dir = args.copy
+    new_config_dir = os.path.join(copy_dir, pathlib.Path(config_dir).name)
+    shutil.copytree(config_dir, new_config_dir)
+
+    # Detect onnx or pytorch model and copy appropriate script.
+    # Assumes exactly one file per model version directory.
+    model_scripts = {
+        "onnx": pfnInPath("HeterogeneousCore/SonicTriton/python/onnx_model.py").split(":")[-1],
+        "torch": pfnInPath("HeterogeneousCore/SonicTriton/python/torch_model.py").split(":")[-1],
+    }
+    for model_version in [str(p.resolve()) for p in pathlib.Path(new_config_dir).iterdir() if p.is_dir()]:
+        model_file = os.listdir(model_version)[0]
+        if model_file.endswith(".onnx"):
+            shutil.copy(model_scripts["onnx"], os.path.join(model_version, "model.py"))
+        elif model_file.endswith(".pt"):
+            shutil.copy(model_scripts["torch"], os.path.join(model_version, "model.py"))
+        else:
+            raise RuntimeError("Unrecognized model file type: {}".format(model_file))
+
+    dump_param_value = "always" if args.dump_always else "on_failure"
+    edit_args = Namespace(
+        platform = "",
+        backend = "python",
+        parameters = {"dump_input": {"string_value": dump_param_value}}
+    )
+
+    for dest, editor in args.edit_dests.items():
+        # Custom namespace doesn't have attributes for all editable fields
+        try:
+            val = getattr(edit_args, dest)
+        except AttributeError:
+            continue
+        
+        if val is not None:
+            editor(args.model,dest,val)
+
+    args.copy = new_config_dir
+    update_config(args)
+
+    # can't do viewing - print_fields breaks on `parameters` MessageMapContainer
+    # if args.view:
+    #     cfg_view(args)
+
 if __name__=="__main__":
     # initial common operations
     model_info = get_model_info()
@@ -451,6 +498,12 @@ if __name__=="__main__":
     parser_threadcontrol = subparsers.add_parser("threadcontrol", parents=[_parser_common, _parser_copy_req, _parser_view_args], help="enable thread controls")
     parser_threadcontrol.add_argument("--nThreads", type=int, required=True, help="number of threads")
     parser_threadcontrol.set_defaults(func=cfg_threadcontrol)
+
+    parser_debug = subparsers.add_parser("debug", parents=[_parser_common, _parser_copy_req], help="add `model.py` and edit config for debugging")
+    parser_debug.add_argument("--dump-always", default=False, action="store_true",
+        help="configure server to dump input tensors for all requests (default: dump only on inference failure)"
+    )
+    parser_debug.set_defaults(func=cfg_debug)
 
     args = parser.parse_args()
     args.model_info = model_info
